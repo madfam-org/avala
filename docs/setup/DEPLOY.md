@@ -86,10 +86,12 @@ Both should return your server's IP address.
 SSH into your server and update packages:
 
 ```bash
-ssh root@YOUR_SERVER_IP
+# For MADFAM infrastructure (via Cloudflare Zero Trust tunnel)
+ssh ssh.madfam.io
+# User: solarpunk (use sudo for admin commands)
 
 # Update package lists
-apt update && apt upgrade -y
+sudo apt update && sudo apt upgrade -y
 
 # Install basic utilities
 apt install -y curl git ufw vim
