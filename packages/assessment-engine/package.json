@@ -24,7 +24,7 @@
   },
   "devDependencies": {
     "typescript": "^5.7.2",
-    "vitest": "^1.0.0"
+    "vitest": "^4.0.14"
   },
   "keywords": [
     "assessment",
