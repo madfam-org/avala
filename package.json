@@ -21,9 +21,9 @@
     "db:studio": "cd packages/db && pnpm prisma studio"
   },
   "devDependencies": {
-    "@turbo/gen": "^2.3.3",
-    "prettier": "^3.4.2",
-    "turbo": "2.6.1",
+    "@turbo/gen": "^2.8.11",
+    "prettier": "^3.8.1",
+    "turbo": "2.8.11",
     "typescript": "^5.7.2"
   },
   "packageManager": "pnpm@9.15.0",
