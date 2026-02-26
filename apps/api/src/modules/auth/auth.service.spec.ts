@@ -1,15 +1,19 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { AuthService, JwtPayload } from './auth.service';
 import { PrismaService } from '../../database/prisma.service';
 import { UnauthorizedException } from '@nestjs/common';
+
+// Mock global fetch for Janua calls
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
 
 describe('AuthService', () => {
   let service: AuthService;
   let prismaService: PrismaService;
   let jwtService: JwtService;
 
-  // Mock user data
   const mockUser = {
     id: 'user-123',
     email: 'test@example.com',
@@ -32,6 +36,8 @@ describe('AuthService', () => {
   };
 
   beforeEach(async () => {
+    mockFetch.mockReset();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthService,
@@ -41,6 +47,7 @@ describe('AuthService', () => {
             user: {
               findFirst: jest.fn(),
               findUnique: jest.fn(),
+              update: jest.fn(),
             },
             tenant: {
               findUnique: jest.fn(),
@@ -51,6 +58,12 @@ describe('AuthService', () => {
           provide: JwtService,
           useValue: {
             sign: jest.fn().mockReturnValue('mock-jwt-token'),
+          },
+        },
+        {
+          provide: ConfigService,
+          useValue: {
+            getOrThrow: jest.fn().mockReturnValue('http://janua.test'),
           },
         },
       ],
@@ -66,35 +79,45 @@ describe('AuthService', () => {
   });
 
   describe('validateUser', () => {
-    it('should return user when credentials are valid', async () => {
+    it('should return user when Janua authenticates and local user exists', async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
       jest.spyOn(prismaService.user, 'findFirst').mockResolvedValue(mockUser as any);
+      jest.spyOn(prismaService.user, 'update').mockResolvedValue(mockUser as any);
 
-      const result = await service.validateUser('test@example.com', 'changeme');
+      const result = await service.validateUser('test@example.com', 'validpassword');
 
       expect(result).toEqual(mockUser);
-      expect(prismaService.user.findFirst).toHaveBeenCalledWith({
-        where: {
-          email: 'test@example.com',
-          status: 'ACTIVE',
-        },
-        include: {
-          tenant: true,
-        },
-      });
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://janua.test/api/v1/auth/signin',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ email: 'test@example.com', password: 'validpassword' }),
+        }),
+      );
     });
 
-    it('should return null when user not found', async () => {
+    it('should return null when Janua rejects credentials', async () => {
+      mockFetch.mockResolvedValue({ ok: false });
+
+      const result = await service.validateUser('test@example.com', 'wrongpassword');
+
+      expect(result).toBeNull();
+      expect(prismaService.user.findFirst).not.toHaveBeenCalled();
+    });
+
+    it('should return null when Janua authenticates but no local user', async () => {
+      mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
       jest.spyOn(prismaService.user, 'findFirst').mockResolvedValue(null);
 
-      const result = await service.validateUser('notfound@example.com', 'password');
+      const result = await service.validateUser('unknown@example.com', 'validpassword');
 
       expect(result).toBeNull();
     });
 
-    it('should return null when password is incorrect', async () => {
-      jest.spyOn(prismaService.user, 'findFirst').mockResolvedValue(mockUser as any);
+    it('should return null when Janua request fails', async () => {
+      mockFetch.mockRejectedValue(new Error('Network error'));
 
-      const result = await service.validateUser('test@example.com', 'wrongpassword');
+      const result = await service.validateUser('test@example.com', 'password');
 
       expect(result).toBeNull();
     });
@@ -164,23 +187,13 @@ describe('AuthService', () => {
       const payload: JwtPayload = {
         sub: 'user-123',
         email: 'test@example.com',
-        tenantId: 'different-tenant', // Mismatch
+        tenantId: 'different-tenant',
         role: 'TRAINEE',
       };
 
       const result = await service.validateJwtPayload(payload);
 
       expect(result).toBeNull();
-    });
-  });
-
-  describe('hashPassword', () => {
-    it('should hash password', async () => {
-      const hash = await service.hashPassword('testpassword');
-
-      expect(hash).toBeDefined();
-      expect(hash).not.toBe('testpassword');
-      expect(hash.length).toBeGreaterThan(20);
     });
   });
 });

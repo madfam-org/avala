@@ -1,17 +1,15 @@
 'use client';
 
+import { useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useUpdateProfile } from '@/hooks/useSettings';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { User, Bell, Shield, Palette } from 'lucide-react';
+import { User, Bell, Shield, Palette, Loader2 } from 'lucide-react';
 
-/**
- * Settings Page
- * Account preferences for all users
- */
 export default function SettingsPage() {
   const { user, tenant } = useAuth();
 
@@ -28,74 +26,10 @@ export default function SettingsPage() {
         </p>
       </div>
 
-      {/* Profile Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Profile Information
-          </CardTitle>
-          <CardDescription>
-            Your personal information and account details
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="firstName">First Name</Label>
-              <Input
-                id="firstName"
-                defaultValue={user.firstName || ''}
-                placeholder="Enter first name"
-                disabled
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="lastName">Last Name</Label>
-              <Input
-                id="lastName"
-                defaultValue={user.lastName || ''}
-                placeholder="Enter last name"
-                disabled
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              defaultValue={user.email}
-              disabled
-            />
-            <p className="text-xs text-muted-foreground">
-              Contact your administrator to change your email address.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label>Role</Label>
-            <Input
-              value={user.role.toLowerCase().replace('_', ' ')}
-              disabled
-              className="capitalize"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Organization</Label>
-            <Input value={tenant.name} disabled />
-          </div>
-          <Button disabled>
-            Save Changes
-          </Button>
-          <p className="text-xs text-muted-foreground">
-            Profile editing will be available in a future update.
-          </p>
-        </CardContent>
-      </Card>
+      <ProfileSection userId={user.id} user={user} tenant={tenant} />
 
       <Separator />
 
-      {/* Notifications Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -108,18 +42,11 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Notification preferences will be available in a future update. You will be able to:
+            Notification preferences coming in a future update.
           </p>
-          <ul className="list-disc list-inside mt-2 text-sm text-muted-foreground space-y-1">
-            <li>Enable/disable email notifications</li>
-            <li>Configure push notification preferences</li>
-            <li>Set notification frequency</li>
-            <li>Choose notification types</li>
-          </ul>
         </CardContent>
       </Card>
 
-      {/* Security Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -127,23 +54,16 @@ export default function SettingsPage() {
             Security
           </CardTitle>
           <CardDescription>
-            Manage your account security settings
+            Password and 2FA are managed through your SSO provider (Janua)
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Security settings will be available in a future update. You will be able to:
+            To change your password or enable two-factor authentication, use your organization&apos;s SSO portal.
           </p>
-          <ul className="list-disc list-inside mt-2 text-sm text-muted-foreground space-y-1">
-            <li>Change your password</li>
-            <li>Enable two-factor authentication</li>
-            <li>View active sessions</li>
-            <li>Download your data</li>
-          </ul>
         </CardContent>
       </Card>
 
-      {/* Appearance Section */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -156,16 +76,104 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Appearance settings will be available in a future update. You will be able to:
+            Appearance settings coming in a future update.
           </p>
-          <ul className="list-disc list-inside mt-2 text-sm text-muted-foreground space-y-1">
-            <li>Switch between light and dark mode</li>
-            <li>Choose accent colors</li>
-            <li>Adjust font sizes</li>
-            <li>Configure accessibility options</li>
-          </ul>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+function ProfileSection({
+  userId,
+  user,
+  tenant,
+}: {
+  userId: string;
+  user: { email: string; firstName: string | null; lastName: string | null; role: string };
+  tenant: { name: string };
+}) {
+  const [firstName, setFirstName] = useState(user.firstName || '');
+  const [lastName, setLastName] = useState(user.lastName || '');
+  const updateProfile = useUpdateProfile(userId);
+
+  const hasChanges =
+    firstName !== (user.firstName || '') || lastName !== (user.lastName || '');
+
+  const handleSave = () => {
+    updateProfile.mutate({ firstName, lastName });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <User className="h-5 w-5" />
+          Profile Information
+        </CardTitle>
+        <CardDescription>
+          Your personal information and account details
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="firstName">First Name</Label>
+            <Input
+              id="firstName"
+              value={firstName}
+              onChange={(e) => setFirstName(e.target.value)}
+              placeholder="Enter first name"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="lastName">Last Name</Label>
+            <Input
+              id="lastName"
+              value={lastName}
+              onChange={(e) => setLastName(e.target.value)}
+              placeholder="Enter last name"
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input
+            id="email"
+            type="email"
+            defaultValue={user.email}
+            disabled
+          />
+          <p className="text-xs text-muted-foreground">
+            Email is managed through your SSO provider.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label>Role</Label>
+          <Input
+            value={user.role.toLowerCase().replace('_', ' ')}
+            disabled
+            className="capitalize"
+          />
+        </div>
+        <div className="space-y-2">
+          <Label>Organization</Label>
+          <Input value={tenant.name} disabled />
+        </div>
+        <Button
+          onClick={handleSave}
+          disabled={!hasChanges || updateProfile.isPending}
+        >
+          {updateProfile.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Save Changes
+        </Button>
+        {updateProfile.isSuccess && (
+          <p className="text-xs text-green-600">Profile updated successfully.</p>
+        )}
+        {updateProfile.isError && (
+          <p className="text-xs text-destructive">Failed to update profile. Please try again.</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }

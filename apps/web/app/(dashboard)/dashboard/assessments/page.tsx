@@ -1,13 +1,25 @@
 'use client';
 
+import { useState } from 'react';
+import { useEnrollments } from '@/hooks/useTraining';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { ClipboardCheck, FileQuestion, CheckCircle2 } from 'lucide-react';
 
-/**
- * Assessments Page
- * Create and grade assessments for instructors/assessors
- */
 export default function AssessmentsPage() {
+  const [page, setPage] = useState(1);
+  const { data: enrollments, isLoading, error } = useEnrollments({ page, limit: 10 });
+
   return (
     <div className="space-y-6">
       <div>
@@ -21,84 +33,72 @@ export default function AssessmentsPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pending Review
+              Total Enrollments
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-xs text-muted-foreground">assessments to grade</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">{enrollments?.total ?? 0}</div>
+            )}
+            <p className="text-xs text-muted-foreground">active trainees</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Completed Today
+              In Progress
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-xs text-muted-foreground">graded assessments</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {enrollments?.data?.filter(e => e.status === 'IN_PROGRESS').length ?? 0}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">active assessments</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Active Quizzes
+              Completed
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">0</div>
-            <p className="text-xs text-muted-foreground">in progress</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {enrollments?.data?.filter(e => e.status === 'COMPLETED').length ?? 0}
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">graded</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Pass Rate
+              Avg. Progress
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">--%</div>
-            <p className="text-xs text-muted-foreground">this month</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <FileQuestion className="h-5 w-5 text-primary" />
-              Quiz Builder
-            </CardTitle>
-            <CardDescription>
-              Create multiple-choice and practical assessments
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Design assessments with various question types, time limits, and passing criteria.
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <CheckCircle2 className="h-5 w-5 text-primary" />
-              Grading Queue
-            </CardTitle>
-            <CardDescription>
-              Review and grade submitted assessments
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground">
-              Grade practical assessments and provide feedback to trainees.
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-12" />
+            ) : (
+              <div className="text-2xl font-bold">
+                {enrollments?.data?.length
+                  ? Math.round(enrollments.data.reduce((sum, e) => sum + (e.progress || 0), 0) / enrollments.data.length)
+                  : 0}%
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">across enrollments</p>
           </CardContent>
         </Card>
       </div>
@@ -107,23 +107,70 @@ export default function AssessmentsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <ClipboardCheck className="h-5 w-5" />
-            Assessment Management
+            Training Enrollments
           </CardTitle>
           <CardDescription>
-            Full assessment workflow and analytics
+            Active training enrollments and assessment progress
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Assessment management features are under development. Coming soon:
-          </p>
-          <ul className="list-disc list-inside mt-2 text-sm text-muted-foreground space-y-1">
-            <li>Quiz creation with question banks</li>
-            <li>Practical assessment rubrics</li>
-            <li>Automated grading for multiple choice</li>
-            <li>Evidence portfolio review</li>
-            <li>Assessment analytics and reports</li>
-          </ul>
+          {isLoading ? (
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          ) : error ? (
+            <p className="text-sm text-muted-foreground">Failed to load enrollments.</p>
+          ) : !enrollments?.data?.length ? (
+            <p className="text-sm text-muted-foreground">No enrollments found.</p>
+          ) : (
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>EC Code</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Progress</TableHead>
+                    <TableHead>Started</TableHead>
+                    <TableHead>Completed</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {enrollments.data.map((enrollment) => (
+                    <TableRow key={enrollment.id}>
+                      <TableCell className="font-mono text-sm">{enrollment.ecCode}</TableCell>
+                      <TableCell>
+                        <Badge variant={
+                          enrollment.status === 'COMPLETED' ? 'default' :
+                          enrollment.status === 'IN_PROGRESS' ? 'secondary' :
+                          'outline'
+                        }>
+                          {enrollment.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{enrollment.progress}%</TableCell>
+                      <TableCell>{new Date(enrollment.startedAt).toLocaleDateString()}</TableCell>
+                      <TableCell>{enrollment.completedAt ? new Date(enrollment.completedAt).toLocaleDateString() : '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {enrollments.totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4">
+                  <p className="text-sm text-muted-foreground">
+                    Page {enrollments.page} of {enrollments.totalPages} ({enrollments.total} total)
+                  </p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
+                      Previous
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setPage(p => p + 1)} disabled={page >= enrollments.totalPages}>
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

@@ -1,4 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
+import { ThrottlerGuard } from "@nestjs/throttler";
 import { RenecController } from "./renec.controller";
 import { RenecService } from "./renec.service";
 import { RenecScraperService } from "./renec-scraper.service";
@@ -37,7 +38,10 @@ describe("RenecController", () => {
         { provide: RenecService, useValue: mockRenecService },
         { provide: RenecScraperService, useValue: mockScraperService },
       ],
-    }).compile();
+    })
+      .overrideGuard(ThrottlerGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<RenecController>(RenecController);
     renecService = module.get(RenecService);

@@ -3,10 +3,10 @@ import {
   UnauthorizedException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../../database/prisma.service';
 import { User } from '@avala/db';
-import * as bcrypt from 'bcrypt';
 
 export interface JwtPayload {
   sub: string; // user ID
@@ -18,18 +18,28 @@ export interface JwtPayload {
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly januaBaseUrl: string;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-  ) {}
+    private readonly configService: ConfigService,
+  ) {
+    this.januaBaseUrl = this.configService.getOrThrow<string>('JANUA_BASE_URL');
+  }
 
   /**
-   * Validate user credentials (used by LocalStrategy)
+   * Validate user credentials by delegating to Janua's signin endpoint.
+   * Janua owns all credential management (bcrypt, MFA, etc.).
    */
   async validateUser(email: string, password: string): Promise<User | null> {
-    // For Phase 1-A, we'll do simple password check
-    // In production, use bcrypt.compare with hashed passwords
+    // Authenticate against Janua
+    const januaOk = await this.authenticateViaJanua(email, password);
+    if (!januaOk) {
+      return null;
+    }
+
+    // Look up the local user record
     const user = await this.prisma.user.findFirst({
       where: {
         email,
@@ -41,16 +51,41 @@ export class AuthService {
     });
 
     if (!user) {
+      this.logger.warn(`Janua authenticated ${email} but no local user found`);
       return null;
     }
 
-    // Temporary: For demo, accept any password for seeded users
-    // In production: await bcrypt.compare(password, user.passwordHash)
-    if (password === 'changeme' || password === 'password') {
-      return user;
-    }
+    // Update last login timestamp
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    });
 
-    return null;
+    return user;
+  }
+
+  /**
+   * Authenticate credentials against Janua's Resource Owner Password flow.
+   * Returns true if Janua accepted the credentials.
+   */
+  private async authenticateViaJanua(email: string, password: string): Promise<boolean> {
+    try {
+      const response = await fetch(`${this.januaBaseUrl}/api/v1/auth/signin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        this.logger.debug(`Janua rejected credentials for ${email}`);
+        return false;
+      }
+
+      return true;
+    } catch (error) {
+      this.logger.error(`Janua authentication request failed: ${(error as Error).message}`);
+      return false;
+    }
   }
 
   /**
@@ -129,11 +164,4 @@ export class AuthService {
     });
   }
 
-  /**
-   * Hash password (for future user registration)
-   */
-  async hashPassword(password: string): Promise<string> {
-    const saltRounds = 10;
-    return bcrypt.hash(password, saltRounds);
-  }
 }

@@ -137,9 +137,9 @@ pnpm --filter web dev   # Web only
 **Access URLs:**
 | Service | URL |
 |---------|-----|
-| Web App | http://localhost:3060 |
-| API | http://localhost:4900 |
-| API Docs (Swagger) | http://localhost:4900/api |
+| Web App | http://localhost:3000 |
+| API | http://localhost:4000 |
+| API Docs (Swagger) | http://localhost:4000/api |
 | Mailhog | http://localhost:8025 |
 
 ---
@@ -173,15 +173,15 @@ pnpm --filter web test:ui
 
 ```bash
 # Get tenant by slug
-curl http://localhost:4900/tenants/slug/madfam
+curl http://localhost:4000/tenants/slug/madfam
 
 # List users (with Tenant Header)
 export TENANT_ID="<tenant-id-from-above>"
-curl http://localhost:4900/users \
+curl http://localhost:4000/users \
   -H "X-Tenant-Id: $TENANT_ID"
 
 # Search EC Standards
-curl "http://localhost:4900/ec-standards?q=EC0217" \
+curl "http://localhost:4000/ec-standards?q=EC0217" \
   -H "X-Tenant-Id: $TENANT_ID"
 ```
 
@@ -303,7 +303,7 @@ pnpm clean                  # Remove build artifacts
 
 ```bash
 # Find process using port
-lsof -i :4900  # or :3060
+lsof -i :4000  # or :3000
 
 # Kill it
 kill -9 <PID>
@@ -339,7 +339,7 @@ pnpm build
 
 ## 📖 Documentation
 
-- **API Docs (Swagger)**: http://localhost:4900/docs
+- **API Docs (Swagger)**: http://localhost:4000/docs
 - **Documentation Hub**: [docs/INDEX.md](../INDEX.md)
 - **Architecture Overview**: [docs/architecture/OVERVIEW.md](../architecture/OVERVIEW.md)
 - **Software Spec**: [docs/architecture/SOFTWARE_SPEC.md](../architecture/SOFTWARE_SPEC.md)

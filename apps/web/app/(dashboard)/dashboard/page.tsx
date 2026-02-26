@@ -1,6 +1,9 @@
 "use client";
 
 import { useAuth } from "@/hooks/useAuth";
+import { useUserStats } from "@/hooks/useSettings";
+import { useDC3Statistics } from "@/hooks/useCompliance";
+import { useCredentialStatistics } from "@/hooks/useBadges";
 import { useTranslations } from "next-intl";
 import {
   Card,
@@ -9,14 +12,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getNavigationForRole, type NavItem } from "@/config/navigation";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 
-/**
- * Dashboard Home Page
- * Shows role-specific quick actions and overview
- */
 export default function DashboardPage() {
   const { user, tenant } = useAuth();
   const t = useTranslations();
@@ -33,7 +33,6 @@ export default function DashboardPage() {
     )
     .slice(0, 6);
 
-  // Get role key for translation
   const roleKey = user.role
     .toLowerCase()
     .replace("_", "") as keyof typeof roleKeyMap;
@@ -120,14 +119,11 @@ export default function DashboardPage() {
       </div>
 
       {/* Role-Specific Content */}
-      <RoleSpecificContent role={user.role} t={t} />
+      <RoleSpecificContent role={user.role} userId={user.id} t={t} />
     </div>
   );
 }
 
-/**
- * Quick Action Card Component
- */
 function QuickActionCard({
   item,
   t,
@@ -157,63 +153,136 @@ function QuickActionCard({
   );
 }
 
-/**
- * Role-Specific Dashboard Content
- */
 function RoleSpecificContent({
   role,
+  userId,
   t,
 }: {
   role: string;
+  userId: string;
   t: ReturnType<typeof useTranslations>;
 }) {
   if (role === "ADMIN") {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("dashboard.overview")}</CardTitle>
-          <CardDescription>{t("common.info")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Phase 1-B: Dashboard widgets and analytics coming in next phase.
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return <AdminDashboardWidgets t={t} />;
   }
 
   if (role === "TRAINEE") {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("training.myTraining")}</CardTitle>
-          <CardDescription>{t("training.progress")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Phase 1-B: Course progress tracking coming in next phase.
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return <TraineeDashboardWidgets userId={userId} t={t} />;
   }
 
   if (role === "INSTRUCTOR") {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("navigation.courses")}</CardTitle>
-          <CardDescription>{t("dashboard.recentActivity")}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground">
-            Phase 1-B: Course management interface coming in next phase.
-          </p>
-        </CardContent>
-      </Card>
-    );
+    return <InstructorDashboardWidgets t={t} />;
   }
 
   return null;
+}
+
+function AdminDashboardWidgets({ t }: { t: ReturnType<typeof useTranslations> }) {
+  const { data: userStats, isLoading: loadingUsers } = useUserStats();
+  const { data: dc3Stats, isLoading: loadingDC3 } = useDC3Statistics();
+  const { data: credStats, isLoading: loadingCreds } = useCredentialStatistics();
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-2xl font-semibold">{t("dashboard.overview")}</h2>
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Users
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingUsers ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{userStats?.total ?? 0}</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              DC-3 Records
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingDC3 ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{(dc3Stats as any)?.total ?? 0}</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Credentials Issued
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {loadingCreds ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{(credStats as any)?.total ?? 0}</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function TraineeDashboardWidgets({
+  userId,
+  t,
+}: {
+  userId: string;
+  t: ReturnType<typeof useTranslations>;
+}) {
+  const { data: credentials, isLoading } = useCredentialStatistics();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("training.myTraining")}</CardTitle>
+        <CardDescription>{t("training.progress")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-6 w-48" />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            You have {(credentials as any)?.total ?? 0} credential(s) on record.
+            Visit your <Link href="/dashboard/badges" className="text-primary underline">badges page</Link> for details.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function InstructorDashboardWidgets({ t }: { t: ReturnType<typeof useTranslations> }) {
+  const { data: userStats, isLoading } = useUserStats();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{t("navigation.courses")}</CardTitle>
+        <CardDescription>{t("dashboard.recentActivity")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <Skeleton className="h-6 w-48" />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {userStats?.byRole?.TRAINEE ?? 0} trainee(s) in your organization.
+            Visit <Link href="/dashboard/courses" className="text-primary underline">courses</Link> to manage your curriculum.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
 }

@@ -44,9 +44,9 @@ pnpm dev
 
 | Service | URL |
 |---------|-----|
-| Web App | http://localhost:3060 |
-| API | http://localhost:4900 |
-| API Docs | http://localhost:4900/api |
+| Web App | http://localhost:3000 |
+| API | http://localhost:4000 |
+| API Docs | http://localhost:4000/api |
 | Mailhog | http://localhost:8025 |
 
 ## Branch Strategy

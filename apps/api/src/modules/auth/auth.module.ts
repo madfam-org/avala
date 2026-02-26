@@ -17,9 +17,7 @@ import { DatabaseModule } from "../../database/database.module";
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret:
-          configService.get<string>("JWT_SECRET") ||
-          "change-me-in-production-use-strong-random-string",
+        secret: configService.getOrThrow<string>("JWT_SECRET"),
         signOptions: {
           expiresIn: configService.get<string>("JWT_EXPIRES_IN") || "1d",
         },

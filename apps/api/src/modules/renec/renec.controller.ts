@@ -1,10 +1,20 @@
-import { Controller, Get, Post, Param, Query, Body } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  Query,
+  Body,
+  UseGuards,
+} from "@nestjs/common";
 import {
   ApiTags,
   ApiOperation,
   ApiResponse,
   ApiBearerAuth,
+  ApiTooManyRequestsResponse,
 } from "@nestjs/swagger";
+import { ThrottlerGuard, Throttle } from "@nestjs/throttler";
 import { RenecService } from "./renec.service";
 import { RenecScraperService } from "./renec-scraper.service";
 import {
@@ -17,6 +27,9 @@ import {
 
 @ApiTags("RENEC Directory")
 @Controller("renec")
+@UseGuards(ThrottlerGuard)
+@Throttle({ default: { ttl: 60000, limit: 30 } })
+@ApiTooManyRequestsResponse({ description: "Too many requests. Please try again later." })
 export class RenecController {
   constructor(
     private readonly renecService: RenecService,

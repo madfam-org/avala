@@ -117,11 +117,11 @@ pnpm dev
 ```
 avala/
 ├── apps/
-│   ├── api/                  # NestJS REST API (port 4900)
+│   ├── api/                  # NestJS REST API (port 4000)
 │   │   ├── src/modules/      # Feature modules (auth, courses, ec-*, compliance)
 │   │   ├── src/common/       # Guards, interceptors, decorators
 │   │   └── test/             # Test utilities
-│   └── web/                  # Next.js PWA (port 3060)
+│   └── web/                  # Next.js PWA (port 3000)
 │       ├── app/              # App Router pages
 │       │   ├── (dashboard)/  # Authenticated dashboard routes
 │       │   ├── (marketing)/  # Public marketing pages

@@ -1,0 +1,100 @@
+# Enclii Service Specification for AVALA
+# Defines deployment configuration for the MADFAM platform orchestrator
+
+version: "1"
+project: avala
+
+services:
+  api:
+    name: avala-api
+    type: web
+    dockerfile: ./apps/api/Dockerfile
+    port: 4000
+    replicas: 2
+    health:
+      path: /v1/health/ready
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    resources:
+      cpu: 500m
+      memory: 512Mi
+      limits:
+        cpu: "1"
+        memory: 1Gi
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: PORT
+        value: "4000"
+      - name: DATABASE_URL
+        secret: avala-db-url
+      - name: REDIS_URL
+        secret: avala-redis-url
+      - name: JWT_SECRET
+        secret: avala-jwt-secret
+      - name: JANUA_BASE_URL
+        secret: avala-janua-base-url
+      - name: JANUA_CLIENT_ID
+        secret: avala-janua-client-id
+      - name: JANUA_CLIENT_SECRET
+        secret: avala-janua-client-secret
+      - name: JANUA_REDIRECT_URI
+        value: https://avala.madfam.io/api/v1/auth/sso/callback
+      - name: WEB_URL
+        value: https://avala.madfam.io
+      - name: SENTRY_DSN
+        secret: avala-sentry-dsn
+    scaling:
+      min: 2
+      max: 5
+      cpu_threshold: 70
+    deploy:
+      strategy: canary
+      canary_weight: 20
+      promotion_delay: 300s
+    hooks:
+      pre_deploy: "npx prisma migrate deploy"
+
+  web:
+    name: avala-web
+    type: web
+    dockerfile: ./apps/web/Dockerfile
+    port: 3000
+    replicas: 2
+    health:
+      path: /
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    resources:
+      cpu: 250m
+      memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+    env:
+      - name: NODE_ENV
+        value: production
+      - name: NEXT_PUBLIC_API_URL
+        value: https://avala.madfam.io/api
+      - name: NEXT_PUBLIC_APP_URL
+        value: https://avala.madfam.io
+    scaling:
+      min: 2
+      max: 4
+      cpu_threshold: 70
+    deploy:
+      strategy: canary
+      canary_weight: 20
+      promotion_delay: 300s
+
+ingress:
+  domain: avala.madfam.io
+  tunnel: cloudflare
+  routes:
+    - path: /api/*
+      service: api
+      strip_prefix: /api
+    - path: /*
+      service: web

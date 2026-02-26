@@ -29,8 +29,8 @@
 ### Development
 ```bash
 pnpm dev                      # All apps (web + api)
-pnpm dev --filter @avala/api  # API only (port 4900)
-pnpm dev --filter @avala/web  # Web only (port 3060)
+pnpm dev --filter @avala/api  # API only (port 4000)
+pnpm dev --filter @avala/web  # Web only (port 3000)
 ```
 
 ### Build & Test
@@ -71,15 +71,15 @@ pnpm --filter @avala/web test:ui        # Vitest UI
 
 | Service | Port | URL |
 |---------|------|-----|
-| Web (Next.js) | 3060 | http://localhost:3060 |
-| API (NestJS) | 4900 | http://localhost:4900 |
-| API Docs | 4900 | http://localhost:4900/docs |
+| Web (Next.js) | 3000 | http://localhost:3000 |
+| API (NestJS) | 4000 | http://localhost:4000 |
+| API Docs | 4000 | http://localhost:4000/docs |
 | PostgreSQL | 5432 | - |
 | Redis | 6379 | - |
 | MinIO | 9000/9001 | http://localhost:9001 (console) |
 | Mailhog | 8025 | http://localhost:8025 |
 
-**Default Login:** `admin@avala.local` / `changeme`
+**Default Login:** Via Janua SSO (navigate to `/api/v1/auth/sso/login`)
 
 ---
 

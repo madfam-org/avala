@@ -1,13 +1,39 @@
 import { NestFactory } from "@nestjs/core";
 import { Logger, ValidationPipe } from "@nestjs/common";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
+import { Logger as PinoLogger } from "nestjs-pino";
 import cookieParser from "cookie-parser";
+import helmet from "helmet";
+import { json, urlencoded } from "express";
 import { AppModule } from "./app.module";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    logger: ["error", "warn", "log", "debug", "verbose"],
+    bufferLogs: true,
   });
+
+  // Use structured Pino logger
+  app.useLogger(app.get(PinoLogger));
+
+  // Security headers
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"],
+          imgSrc: ["'self'", "data:", "https:"],
+          connectSrc: ["'self'", process.env.WEB_URL || "http://localhost:3000"],
+        },
+      },
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
+
+  // Request size limits
+  app.use(json({ limit: "10mb" }));
+  app.use(urlencoded({ limit: "10mb", extended: true }));
 
   // Cookie parser for JWT in cookies
   app.use(cookieParser());

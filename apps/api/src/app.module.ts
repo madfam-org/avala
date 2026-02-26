@@ -3,6 +3,8 @@ import { ConfigModule, ConfigService } from "@nestjs/config";
 import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { APP_INTERCEPTOR } from "@nestjs/core";
+import { LoggerModule } from "nestjs-pino";
+import { PrometheusModule } from "@willsoto/nestjs-prometheus";
 import { DatabaseModule } from "./database/database.module";
 import { CacheModule } from "./modules/cache/cache.module";
 import { TenantInterceptor } from "./common/interceptors/tenant.interceptor";
@@ -50,6 +52,29 @@ import { ECAssessmentModule } from "./modules/ec-assessment/ec-assessment.module
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: [".env.local", ".env"],
+    }),
+
+    // Structured JSON logging (feeds Enclii log pipeline)
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        pinoHttp: {
+          level: config.get("NODE_ENV") === "production" ? "info" : "debug",
+          transport:
+            config.get("NODE_ENV") !== "production"
+              ? { target: "pino-pretty", options: { colorize: true } }
+              : undefined,
+          autoLogging: true,
+          redact: ["req.headers.authorization", "req.headers.cookie"],
+        },
+      }),
+    }),
+
+    // Prometheus metrics (feeds Enclii Grafana)
+    PrometheusModule.register({
+      path: "/metrics",
+      defaultMetrics: { enabled: true },
     }),
 
     // Scheduling (for RENEC harvest cron jobs)
