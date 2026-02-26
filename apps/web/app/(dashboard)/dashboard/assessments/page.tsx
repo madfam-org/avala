@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ClipboardCheck, FileQuestion, CheckCircle2 } from 'lucide-react';
+import { ClipboardCheck } from 'lucide-react';
 
 export default function AssessmentsPage() {
   const [page, setPage] = useState(1);

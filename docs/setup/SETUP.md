@@ -25,13 +25,13 @@
 - Tenant decorator & interceptor
 - Authentication (JWT, Local, Janua SSO)
 - Swagger documentation at `/api`
-- Comprehensive test coverage (80 suites, 1,087 tests)
+- Comprehensive test coverage (91 suites, 1,462 tests)
 
 ✅ **Frontend Architecture** (Next.js 15)
 - App Router with React 19
 - shadcn/ui components
 - Tailwind CSS styling
-- Component tests (8 suites, 96 tests)
+- Component tests (30 suites, 231 tests)
 
 ✅ **Infrastructure**
 - Docker Compose with PostgreSQL, Redis, MinIO, Mailhog
@@ -167,10 +167,10 @@ pnpm --filter web dev   # Web only
 # All tests
 pnpm test
 
-# API tests (80 suites, 1,087 tests)
+# API tests (91 suites, 1,462 tests)
 pnpm --filter api test
 
-# Web tests (8 suites, 96 tests)
+# Web tests (30 suites, 231 tests)
 pnpm --filter web test
 ```
 

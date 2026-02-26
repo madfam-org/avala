@@ -68,6 +68,7 @@ describe("RenecService", () => {
       renecEC: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         count: jest.fn(),
       },
       renecSyncJob: {
@@ -223,7 +224,7 @@ describe("RenecService", () => {
 
   describe("getRenecECById", () => {
     it("should return EC by clave", async () => {
-      mockPrismaService.renecEC.findUnique.mockResolvedValue(mockEC);
+      mockPrismaService.renecEC.findFirst.mockResolvedValue(mockEC);
 
       const result = await service.getRenecECById("EC0249");
 
@@ -231,7 +232,7 @@ describe("RenecService", () => {
     });
 
     it("should throw NotFoundException if not found", async () => {
-      mockPrismaService.renecEC.findUnique.mockResolvedValue(null);
+      mockPrismaService.renecEC.findFirst.mockResolvedValue(null);
 
       await expect(service.getRenecECById("invalid")).rejects.toThrow(
         NotFoundException,

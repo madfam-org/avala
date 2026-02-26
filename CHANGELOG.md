@@ -59,8 +59,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shared demo data seed (tenant, users, courses, enrollments, DC-3s, credentials)
 
 #### Test Coverage
-- Comprehensive API test coverage (80 suites, 1,087 tests)
-- Web component tests (8 suites, 96 tests)
+- Comprehensive API test coverage (91 suites, 1,462 tests)
+- Web component tests (30 suites, 231 tests)
 - Handler tests for all API controllers
 - Strategy tests for search and authentication
 - Guard and interceptor tests

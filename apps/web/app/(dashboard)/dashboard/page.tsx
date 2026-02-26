@@ -236,7 +236,7 @@ function AdminDashboardWidgets({ t }: { t: ReturnType<typeof useTranslations> })
 }
 
 function TraineeDashboardWidgets({
-  userId,
+  userId: _userId,
   t,
 }: {
   userId: string;

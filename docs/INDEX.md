@@ -285,11 +285,11 @@ pnpm dev
 # Run all tests
 pnpm test
 
-# API tests (80 suites, 1,087 tests)
+# API tests (91 suites, 1,462 tests)
 pnpm --filter @avala/api test
 pnpm --filter @avala/api test:cov
 
-# Web tests (8 suites, 96 tests)
+# Web tests (30 suites, 231 tests)
 pnpm --filter @avala/web test
 pnpm --filter @avala/web test:coverage
 ```

@@ -13,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { FileCheck, FileText, ClipboardList, Calendar, Download, RefreshCw } from 'lucide-react';
+import { FileText, ClipboardList, Calendar, Download, RefreshCw } from 'lucide-react';
 import { useDC3Records, useDC3Statistics, useSIRCEExports, useTriggerSIRCEExport, useLFTPlans, useLFTSummary } from '@/hooks/useCompliance';
 
 export default function CompliancePage() {
@@ -247,7 +247,7 @@ function SIRCEExportsSection() {
 
 function LFTPlansSection() {
   const { data: plans, isLoading, error } = useLFTPlans();
-  const { data: summary } = useLFTSummary();
+  const { data: _summary } = useLFTSummary();
 
   return (
     <Card>

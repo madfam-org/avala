@@ -210,13 +210,13 @@ SMTP_PORT=1025
 
 ## Test Coverage
 
-### API (80 suites, 1,087 tests)
+### API (91 suites, 1,462 tests)
 - Statements: ~75%
 - Branches: ~60%
 - Functions: ~75%
 - Lines: ~75%
 
-### Web (8 suites, 96 tests)
+### Web (30 suites, 231 tests)
 - Component tests with Vitest
 - React Testing Library
 

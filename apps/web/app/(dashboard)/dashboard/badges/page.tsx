@@ -15,10 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Award, Trophy, Star, Medal } from 'lucide-react';
+import { Award } from 'lucide-react';
 
 export default function BadgesPage() {
-  const { user } = useAuth();
+  const { user: _user } = useAuth();
   const { data: stats, isLoading: loadingStats } = useCredentialStatistics();
   const [page, setPage] = useState(1);
   const { data: credentials, isLoading: loadingCreds, error } = useCredentials({ page, limit: 10 });
