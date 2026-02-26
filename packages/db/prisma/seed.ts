@@ -510,6 +510,51 @@ async function main() {
     `  - Completion: ${achievementsSummary.byCategory.COMPLETION} achievements\n`,
   );
 
+  // 13. Seed sample Employer
+  console.log("Creating sample employer...");
+
+  // Delete existing sample employers for idempotency, then recreate
+  await prisma.employer.deleteMany({
+    where: {
+      tenantId: tenant.id,
+      rfc: "MAD200101ABC",
+    },
+  });
+
+  const employer = await prisma.employer.create({
+    data: {
+      tenantId: tenant.id,
+      businessName: "Innovaciones MADFAM S.A.S. de C.V.",
+      rfc: "MAD200101ABC",
+      legalName: "Innovaciones MADFAM S.A.S. de C.V.",
+      address: "Av. Insurgentes Sur 1234, Col. Del Valle, CDMX, C.P. 03100",
+      workCenter: "CT-001",
+      legalContact: "Aldo Ruiz Luna",
+      email: "compliance@madfam.io",
+      phone: "+52 55 1234 5678",
+    },
+  });
+
+  console.log(`✓ Employer created: ${employer.businessName} (RFC: ${employer.rfc})\n`);
+
+  // 14. Seed sample Credential Issuer
+  console.log("Creating sample credential issuer...");
+
+  const credentialIssuer = await prisma.credentialIssuer.upsert({
+    where: { did: "did:web:avala.example.com" },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      did: "did:web:avala.example.com",
+      name: "AVALA Credential Issuer",
+      description: "Official credential issuer for AVALA learning platform",
+      publicKeyUrl: "https://avala.example.com/.well-known/did.json",
+      privateKeyPath: "./keys/issuer.key",
+    },
+  });
+
+  console.log(`✓ Credential Issuer created: ${credentialIssuer.name} (DID: ${credentialIssuer.did})\n`);
+
   console.log("✅ Seeding completed successfully!\n");
   console.log("📋 Summary:");
   console.log(`   - Tenant: ${tenant.name}`);
@@ -527,8 +572,10 @@ async function main() {
     `   - Quizzes: ${ec0249AssessmentSummary.totalQuizzes} with ${ec0249AssessmentSummary.totalQuestions} questions`,
   );
   console.log(
-    `   - Achievements: ${achievementsSummary.totalAchievements} (${achievementsSummary.totalPoints} points)\n`,
+    `   - Achievements: ${achievementsSummary.totalAchievements} (${achievementsSummary.totalPoints} points)`,
   );
+  console.log(`   - Employers: 1 (${employer.businessName})`);
+  console.log(`   - Credential Issuers: 1 (${credentialIssuer.name})\n`);
   console.log("🔐 Login credentials:");
   console.log(`   Email: admin@avala.local`);
   console.log(`   Password: (set via auth system)\n`);

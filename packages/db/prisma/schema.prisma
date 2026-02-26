@@ -14,45 +14,49 @@ datasource db {
 // ============================================
 
 model Tenant {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  slug      String   @unique
-  plan      Plan     @default(BASIC)
-  status    TenantStatus @default(ACTIVE)
+  id                 String             @id @default(uuid()) @db.Uuid
+  name               String
+  slug               String             @unique
+  plan               Plan               @default(BASIC)
+  status             TenantStatus       @default(ACTIVE)
   subscriptionStatus SubscriptionStatus @default(TRIALING) @map("subscription_status")
-  settings  Json     @default("{}")
+  settings           Json               @default("{}")
 
   // Mexican Legal/Tax Compliance (DC-3/STPS)
-  rfc       String?  // Registro Federal de Contribuyentes (company tax ID)
-  legalName String?  @map("legal_name") // Official registered company name
+  rfc                String? // Registro Federal de Contribuyentes (company tax ID)
+  legalName          String? @map("legal_name") // Official registered company name
   representativeName String? @map("representative_name") // Legal representative for DC-3
 
   // Janua multi-provider billing (Conekta for MX, Polar for international)
-  januaCustomerId   String?  @unique @map("janua_customer_id")
-  billingProvider   String?  @map("billing_provider") // 'conekta' | 'polar' | 'stripe'
-  countryCode       String?  @map("country_code") // ISO country code for billing routing
-  billingEmail      String?  @map("billing_email") // Billing contact email
+  januaCustomerId String? @unique @map("janua_customer_id")
+  billingProvider String? @map("billing_provider") // 'conekta' | 'polar' | 'stripe'
+  countryCode     String? @map("country_code") // ISO country code for billing routing
+  billingEmail    String? @map("billing_email") // Billing contact email
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  users              User[]
+  users               User[]
   competencyStandards CompetencyStandard[]
-  courses            Course[]
-  paths              Path[]
-  assessments        Assessment[]
-  portfolios         Portfolio[]
-  dc3Records         DC3[]
-  lftPlans           LFTPlan[]
-  sirceExports       SIRCEExport[]
-  credentials        Credential[]
-  auditLogs          AuditLog[]
-  events             Event[]
+  courses             Course[]
+  paths               Path[]
+  assessments         Assessment[]
+  portfolios          Portfolio[]
+  dc3Records          DC3[]
+  lftPlans            LFTPlan[]
+  sirceExports        SIRCEExport[]
+  credentials         Credential[]
+  auditLogs           AuditLog[]
+  events              Event[]
+  employers           Employer[]
+  credentialIssuers   CredentialIssuer[]
+  evaluatorAgreements EvaluatorAgreement[]
+  lrsConfigurations   LRSConfiguration[]
 
-  @@map("tenants")
   @@index([slug])
   @@index([status])
+  @@map("tenants")
 }
 
 enum Plan {
@@ -76,37 +80,37 @@ enum SubscriptionStatus {
 }
 
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  tenantId  String   @map("tenant_id") @db.Uuid
+  id        String     @id @default(uuid()) @db.Uuid
+  tenantId  String     @map("tenant_id") @db.Uuid
   email     String
-  firstName String?  @map("first_name")
-  lastName  String?  @map("last_name")
-  role      Role     @default(TRAINEE)
+  firstName String?    @map("first_name")
+  lastName  String?    @map("last_name")
+  role      Role       @default(TRAINEE)
   status    UserStatus @default(ACTIVE)
 
   // Authentication
   passwordHash String? @map("password_hash")
 
   // Mexican Compliance (DC-3/SIRCE/LFT)
-  curp      String?  @unique // Clave Única de Registro de Población
-  rfc       String?  // Registro Federal de Contribuyentes
+  curp String? @unique // Clave Única de Registro de Población
+  rfc  String? // Registro Federal de Contribuyentes
 
   // SSO / Janua Integration
-  ssoSubject String?  @map("sso_subject")
-  ssoProvider String? @map("sso_provider")
+  ssoSubject     String? @map("sso_subject")
+  ssoProvider    String? @map("sso_provider")
   januaSubjectId String? @unique @map("janua_subject_id") // Janua user sub claim
-  emailVerified Boolean @default(false) @map("email_verified")
-  avatarUrl String?  @map("avatar_url")
+  emailVerified  Boolean @default(false) @map("email_verified")
+  avatarUrl      String? @map("avatar_url")
 
   // Metadata
-  metadata  Json     @default("{}")
+  metadata Json @default("{}")
 
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   lastLoginAt DateTime? @map("last_login_at")
 
   // Relations
-  tenant              Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   // As trainee
   enrollments         Enrollment[]
@@ -117,19 +121,26 @@ model User {
   credentialsReceived Credential[]
 
   // As instructor/assessor
-  coursesOwned        Course[] @relation("CourseOwner")
-  assessmentsCreated  Assessment[] @relation("AssessmentCreator")
-  attemptsAssessed    Attempt[] @relation("AttemptAssessor")
-  artifactsSigned     Artifact[] @relation("ArtifactSigner")
+  coursesOwned       Course[]     @relation("CourseOwner")
+  assessmentsCreated Assessment[] @relation("AssessmentCreator")
+  attemptsAssessed   Attempt[]    @relation("AttemptAssessor")
+  artifactsSigned    Artifact[]   @relation("ArtifactSigner")
+
+  // Inter-rater agreement
+  evaluatorAgreements1 EvaluatorAgreement[] @relation("Evaluator1")
+  evaluatorAgreements2 EvaluatorAgreement[] @relation("Evaluator2")
+
+  // Events
+  triggeredEvents Event[] @relation("EventActor")
 
   // Audit
-  auditLogsActor      AuditLog[]
+  auditLogsActor AuditLog[]
 
   @@unique([tenantId, email])
-  @@map("users")
   @@index([tenantId, role])
   @@index([tenantId, status])
   @@index([ssoSubject])
+  @@map("users")
 }
 
 enum Role {
@@ -153,33 +164,33 @@ enum UserStatus {
 // ============================================
 
 model CompetencyStandard {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
   // EC Metadata
-  issuer      String   // e.g., "CONOCER"
-  code        String   // e.g., "EC0217.01"
-  title       String
-  version     String
-  locale      String   @default("es-MX")
+  issuer  String // e.g., "CONOCER"
+  code    String // e.g., "EC0217.01"
+  title   String
+  version String
+  locale  String @default("es-MX")
 
   // Structure snapshot (for version pinning)
-  structure   Json     // Full EC structure as JSON
+  structure Json // Full EC structure as JSON
 
-  status      StandardStatus @default(ACTIVE)
+  status StandardStatus @default(ACTIVE)
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  elements    Element[]
-  courses     Course[] @relation("CourseStandards")
+  tenant   Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  elements Element[]
+  courses  Course[]  @relation("CourseStandards")
 
   @@unique([tenantId, code, version])
-  @@map("competency_standards")
   @@index([tenantId, status])
   @@index([code])
+  @@map("competency_standards")
 }
 
 enum StandardStatus {
@@ -189,51 +200,52 @@ enum StandardStatus {
 }
 
 model Element {
-  id          String   @id @default(uuid()) @db.Uuid
-  standardId  String   @map("standard_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  standardId String @map("standard_id") @db.Uuid
 
-  index       Int      // Position within standard
+  index       Int // Position within standard
   title       String
-  description String?  @db.Text
+  description String? @db.Text
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  standard    CompetencyStandard @relation(fields: [standardId], references: [id], onDelete: Cascade)
-  criteria    Criterion[]
+  standard CompetencyStandard @relation(fields: [standardId], references: [id], onDelete: Cascade)
+  criteria Criterion[]
 
-  @@map("elements")
   @@index([standardId, index])
+  @@map("elements")
 }
 
 model Criterion {
-  id          String   @id @default(uuid()) @db.Uuid
-  elementId   String   @map("element_id") @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  elementId String @map("element_id") @db.Uuid
 
-  type        CriterionType
-  code        String   // e.g., "1.1", "D1", "C2"
-  text        String   @db.Text
-  weight      Float    @default(1.0)
+  type   CriterionType
+  code   String // e.g., "1.1", "D1", "C2"
+  text   String        @db.Text
+  weight Float         @default(1.0)
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  element     Element @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  element Element @relation(fields: [elementId], references: [id], onDelete: Cascade)
 
   // Mappings
-  lessons     LessonCriterion[]
-  rubrics     Rubric[]
-  attemptScores Json?  // Stores score data per attempt
+  lessons       LessonCriterion[]
+  rubrics       Rubric[]
+  artifacts     Artifact[]
+  attemptScores Json? // Stores score data per attempt
 
-  @@map("criteria")
   @@index([elementId])
+  @@map("criteria")
 }
 
 enum CriterionType {
-  DESEMPENO   // Performance
+  DESEMPENO // Performance
   CONOCIMIENTO // Knowledge
-  PRODUCTO    // Product
-  ACTITUD     // Attitude (extension)
+  PRODUCTO // Product
+  ACTITUD // Attitude (extension)
 }
 
 // ============================================
@@ -241,44 +253,44 @@ enum CriterionType {
 // ============================================
 
 model Course {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  code        String   @unique // Course code (e.g., "ALINEACION-001")
-  title       String
-  description String?  @db.Text
-  durationHours Int    @map("duration_hours") // Total duration in hours (required for DC-3)
-  version     String   @default("1.0")
-  status      CourseStatus @default(DRAFT)
+  code          String       @unique // Course code (e.g., "ALINEACION-001")
+  title         String
+  description   String?      @db.Text
+  durationHours Int          @map("duration_hours") // Total duration in hours (required for DC-3)
+  version       String       @default("1.0")
+  status        CourseStatus @default(DRAFT)
 
-  ownerId     String   @map("owner_id") @db.Uuid
+  ownerId String @map("owner_id") @db.Uuid
 
   // EC Alignment
-  ecCodes     String[] @map("ec_codes") // Array of EC codes
+  ecCodes String[] @map("ec_codes") // Array of EC codes
 
   // Mexican Compliance (DC-3/STPS)
   stpsRegistrationNumber String? @map("stps_registration_number") // STPS course registration number
 
-  metadata    Json     @default("{}")
+  metadata Json @default("{}")
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   publishedAt DateTime? @map("published_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  owner       User @relation("CourseOwner", fields: [ownerId], references: [id])
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  owner       User                 @relation("CourseOwner", fields: [ownerId], references: [id])
   standards   CompetencyStandard[] @relation("CourseStandards")
   modules     Module[]
-  enrollments CourseEnrollment[] @relation("CourseEnrollments")
+  enrollments CourseEnrollment[]   @relation("CourseEnrollments")
   assessments Assessment[]
   pathItems   PathItem[]
   dc3Records  DC3[]
 
-  @@map("courses")
   @@index([tenantId, status])
   @@index([ownerId])
   @@index([code])
+  @@map("courses")
 }
 
 enum CourseStatus {
@@ -288,61 +300,61 @@ enum CourseStatus {
 }
 
 model Module {
-  id          String   @id @default(uuid()) @db.Uuid
-  courseId    String   @map("course_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  courseId String @map("course_id") @db.Uuid
 
-  title       String
-  order       Int
+  title String
+  order Int
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  course      Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  lessons     Lesson[]
+  course  Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons Lesson[]
 
-  @@map("modules")
   @@index([courseId, order])
+  @@map("modules")
 }
 
 model Lesson {
-  id          String   @id @default(uuid()) @db.Uuid
-  moduleId    String   @map("module_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  moduleId String @map("module_id") @db.Uuid
 
   title       String
-  order       Int      // Order within module
-  content     String?  @db.Text // Lesson text content (description, instructions, etc.)
-  videoUrl    String?  @map("video_url") // Video URL (YouTube, Vimeo, etc.)
-  contentRef  String?  @map("content_ref") // S3 path or URL for additional materials
-  durationMin Int?     @map("duration_min")
+  order       Int // Order within module
+  content     String? @db.Text // Lesson text content (description, instructions, etc.)
+  videoUrl    String? @map("video_url") // Video URL (YouTube, Vimeo, etc.)
+  contentRef  String? @map("content_ref") // S3 path or URL for additional materials
+  durationMin Int?    @map("duration_min")
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  module      Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  criteria    LessonCriterion[]
-  progress    LessonProgress[]
-  attendance  Attendance[]
+  module     Module            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  criteria   LessonCriterion[]
+  progress   LessonProgress[]
+  attendance Attendance[]
 
-  @@map("lessons")
   @@index([moduleId, order])
+  @@map("lessons")
 }
 
 // Join table: Lesson <-> Criterion mapping
 model LessonCriterion {
-  id          String   @id @default(uuid()) @db.Uuid
-  lessonId    String   @map("lesson_id") @db.Uuid
-  criterionId String   @map("criterion_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  lessonId    String @map("lesson_id") @db.Uuid
+  criterionId String @map("criterion_id") @db.Uuid
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  lesson      Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-  criterion   Criterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  lesson    Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  criterion Criterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
 
   @@unique([lessonId, criterionId])
-  @@map("lesson_criteria")
   @@index([lessonId])
   @@index([criterionId])
+  @@map("lesson_criteria")
 }
 
 // ============================================
@@ -350,60 +362,60 @@ model LessonCriterion {
 // ============================================
 
 model Path {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
   title       String
-  description String?  @db.Text
+  description String? @db.Text
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   items       PathItem[]
   enrollments Enrollment[]
 
-  @@map("paths")
   @@index([tenantId])
+  @@map("paths")
 }
 
 model PathItem {
-  id          String   @id @default(uuid()) @db.Uuid
-  pathId      String   @map("path_id") @db.Uuid
-  courseId    String   @map("course_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  pathId   String @map("path_id") @db.Uuid
+  courseId String @map("course_id") @db.Uuid
 
-  order       Int
-  required    Boolean  @default(true)
+  order    Int
+  required Boolean @default(true)
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  path        Path @relation(fields: [pathId], references: [id], onDelete: Cascade)
-  course      Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  path   Path   @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
 
-  @@map("path_items")
   @@index([pathId, order])
+  @@map("path_items")
 }
 
 model Enrollment {
-  id          String   @id @default(uuid()) @db.Uuid
-  pathId      String   @map("path_id") @db.Uuid
-  traineeId   String   @map("trainee_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  pathId       String  @map("path_id") @db.Uuid
+  traineeId    String  @map("trainee_id") @db.Uuid
   supervisorId String? @map("supervisor_id") @db.Uuid
 
-  status      EnrollmentStatus @default(ACTIVE)
+  status EnrollmentStatus @default(ACTIVE)
 
-  startedAt   DateTime @default(now()) @map("started_at")
+  startedAt   DateTime  @default(now()) @map("started_at")
   dueAt       DateTime? @map("due_at")
   completedAt DateTime? @map("completed_at")
 
   // Relations
-  path        Path @relation(fields: [pathId], references: [id], onDelete: Cascade)
-  trainee     User @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  path    Path @relation(fields: [pathId], references: [id], onDelete: Cascade)
+  trainee User @relation(fields: [traineeId], references: [id], onDelete: Cascade)
 
-  @@map("enrollments")
   @@index([pathId])
   @@index([traineeId])
+  @@map("enrollments")
 }
 
 enum EnrollmentStatus {
@@ -417,26 +429,26 @@ enum EnrollmentStatus {
 // ============================================
 
 model CourseEnrollment {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  courseId    String   @map("course_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  courseId String @map("course_id") @db.Uuid
 
-  status      CourseEnrollmentStatus @default(IN_PROGRESS)
+  status CourseEnrollmentStatus @default(IN_PROGRESS)
 
-  enrolledAt  DateTime @default(now()) @map("enrolled_at")
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at")
   completedAt DateTime? @map("completed_at")
 
   // Relations
-  user         User @relation("UserCourseEnrollments", fields: [userId], references: [id], onDelete: Cascade)
-  course       Course @relation("CourseEnrollments", fields: [courseId], references: [id], onDelete: Cascade)
+  user         User             @relation("UserCourseEnrollments", fields: [userId], references: [id], onDelete: Cascade)
+  course       Course           @relation("CourseEnrollments", fields: [courseId], references: [id], onDelete: Cascade)
   progress     LessonProgress[]
   certificates Certificate[]
 
   @@unique([userId, courseId])
-  @@map("course_enrollments")
   @@index([userId])
   @@index([courseId])
   @@index([status])
+  @@map("course_enrollments")
 }
 
 enum CourseEnrollmentStatus {
@@ -445,25 +457,25 @@ enum CourseEnrollmentStatus {
 }
 
 model LessonProgress {
-  id            String   @id @default(uuid()) @db.Uuid
-  enrollmentId  String   @map("enrollment_id") @db.Uuid
-  lessonId      String   @map("lesson_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
+  lessonId     String @map("lesson_id") @db.Uuid
 
-  status        ProgressStatus @default(NOT_STARTED)
-  completedAt   DateTime? @map("completed_at")
-  viewedAt      DateTime? @map("viewed_at") // First time lesson was opened
+  status      ProgressStatus @default(NOT_STARTED)
+  completedAt DateTime?      @map("completed_at")
+  viewedAt    DateTime?      @map("viewed_at") // First time lesson was opened
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  enrollment    CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  lesson        Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollment CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson     Lesson           @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([enrollmentId, lessonId])
-  @@map("lesson_progress")
   @@index([enrollmentId])
   @@index([lessonId])
   @@index([status])
+  @@map("lesson_progress")
 }
 
 enum ProgressStatus {
@@ -477,37 +489,37 @@ enum ProgressStatus {
 // ============================================
 
 model Certificate {
-  id            String   @id @default(uuid()) @db.Uuid
-  enrollmentId  String   @map("enrollment_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
 
   // Public certificate identifier (for verification)
-  certificateUuid String  @unique @default(uuid()) @map("certificate_uuid") @db.Uuid
+  certificateUuid String @unique @default(uuid()) @map("certificate_uuid") @db.Uuid
 
   // PDF storage
-  pdfPath       String?  @map("pdf_path") // S3 key or local file path
+  pdfPath String? @map("pdf_path") // S3 key or local file path
 
   // DC-3 specific fields
-  folio         String?  @unique // DC-3 folio number (sequential or formatted)
+  folio String? @unique // DC-3 folio number (sequential or formatted)
 
   // Issuance tracking
-  issuedAt      DateTime @default(now()) @map("issued_at")
-  issuedBy      String?  @map("issued_by") @db.Uuid // User ID of issuer (admin/system)
+  issuedAt DateTime @default(now()) @map("issued_at")
+  issuedBy String?  @map("issued_by") @db.Uuid // User ID of issuer (admin/system)
 
   // Revocation (for compliance audits)
   revokedAt     DateTime? @map("revoked_at")
   revokedBy     String?   @map("revoked_by") @db.Uuid
   revokedReason String?   @map("revoked_reason") @db.Text
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  enrollment    CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollment CourseEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
 
-  @@map("certificates")
   @@index([enrollmentId])
   @@index([certificateUuid])
   @@index([folio])
   @@index([issuedAt])
+  @@map("certificates")
 }
 
 // ============================================
@@ -515,28 +527,29 @@ model Certificate {
 // ============================================
 
 model Assessment {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  courseId    String?  @map("course_id") @db.Uuid
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  courseId String? @map("course_id") @db.Uuid
 
-  title       String
-  method      AssessmentMethod
-  policyJson  Json     @default("{}") @map("policy_json")
+  title      String
+  method     AssessmentMethod
+  policyJson Json             @default("{}") @map("policy_json")
 
-  creatorId   String   @map("creator_id") @db.Uuid
+  creatorId String @map("creator_id") @db.Uuid
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  course      Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
-  creator     User @relation("AssessmentCreator", fields: [creatorId], references: [id])
-  rubrics     Rubric[]
-  attempts    Attempt[]
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course              Course?              @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  creator             User                 @relation("AssessmentCreator", fields: [creatorId], references: [id])
+  rubrics             Rubric[]
+  attempts            Attempt[]
+  evaluatorAgreements EvaluatorAgreement[]
 
-  @@map("assessments")
   @@index([tenantId])
   @@index([courseId])
+  @@map("assessments")
 }
 
 enum AssessmentMethod {
@@ -549,47 +562,47 @@ enum AssessmentMethod {
 }
 
 model Rubric {
-  id          String   @id @default(uuid()) @db.Uuid
-  assessmentId String  @map("assessment_id") @db.Uuid
-  criterionId String   @map("criterion_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  assessmentId String @map("assessment_id") @db.Uuid
+  criterionId  String @map("criterion_id") @db.Uuid
 
-  scaleMin    Float    @map("scale_min")
-  scaleMax    Float    @map("scale_max")
-  descriptors Json     @default("[]") // Array of level descriptors
+  scaleMin    Float @map("scale_min")
+  scaleMax    Float @map("scale_max")
+  descriptors Json  @default("[]") // Array of level descriptors
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  assessment  Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  criterion   Criterion @relation(fields: [criterionId], references: [id], onDelete: Cascade)
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  criterion  Criterion  @relation(fields: [criterionId], references: [id], onDelete: Cascade)
 
   @@unique([assessmentId, criterionId])
-  @@map("rubrics")
   @@index([assessmentId])
+  @@map("rubrics")
 }
 
 model Attempt {
-  id          String   @id @default(uuid()) @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
   assessmentId String  @map("assessment_id") @db.Uuid
-  traineeId   String   @map("trainee_id") @db.Uuid
-  assessorId  String?  @map("assessor_id") @db.Uuid
+  traineeId    String  @map("trainee_id") @db.Uuid
+  assessorId   String? @map("assessor_id") @db.Uuid
 
   // Scores stored as JSON: { criterionId: score, ... }
-  scoreJson   Json     @default("{}") @map("score_json")
+  scoreJson Json @default("{}") @map("score_json")
 
-  status      AttemptStatus @default(IN_PROGRESS)
+  status AttemptStatus @default(IN_PROGRESS)
 
-  startedAt   DateTime @default(now()) @map("started_at")
-  finishedAt  DateTime? @map("finished_at")
+  startedAt  DateTime  @default(now()) @map("started_at")
+  finishedAt DateTime? @map("finished_at")
 
   // Relations
-  assessment  Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
-  trainee     User @relation(fields: [traineeId], references: [id], onDelete: Cascade)
-  assessor    User? @relation("AttemptAssessor", fields: [assessorId], references: [id])
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  trainee    User       @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  assessor   User?      @relation("AttemptAssessor", fields: [assessorId], references: [id])
 
-  @@map("attempts")
   @@index([assessmentId])
   @@index([traineeId])
+  @@map("attempts")
 }
 
 enum AttemptStatus {
@@ -600,29 +613,33 @@ enum AttemptStatus {
 }
 
 model Artifact {
-  id          String   @id @default(uuid()) @db.Uuid
-  traineeId   String   @map("trainee_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  traineeId    String  @map("trainee_id") @db.Uuid
   assessmentId String? @map("assessment_id") @db.Uuid
+  criterionId  String? @map("criterion_id") @db.Uuid // Phase 4A: criterion mapping
 
-  type        ArtifactType
-  ref         String   // S3 path, URL, or text reference
-  hash        String   // SHA-256 hash for integrity
+  type ArtifactType
+  ref  String // S3 path, URL, or text reference
+  hash String // SHA-256 hash for integrity
 
-  signerId    String?  @map("signer_id") @db.Uuid
-  signedAt    DateTime? @map("signed_at")
+  signerId String?   @map("signer_id") @db.Uuid
+  signedAt DateTime? @map("signed_at")
 
-  metadata    Json     @default("{}")
+  metadata Json @default("{}")
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  trainee     User @relation(fields: [traineeId], references: [id], onDelete: Cascade)
-  signer      User? @relation("ArtifactSigner", fields: [signerId], references: [id])
-  portfolios  PortfolioArtifact[]
+  trainee            User                 @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  signer             User?                @relation("ArtifactSigner", fields: [signerId], references: [id])
+  criterion          Criterion?           @relation(fields: [criterionId], references: [id], onDelete: SetNull)
+  portfolios         PortfolioArtifact[]
+  credentialEvidence CredentialEvidence[]
 
-  @@map("artifacts")
   @@index([traineeId])
   @@index([hash])
+  @@index([criterionId])
+  @@map("artifacts")
 }
 
 enum ArtifactType {
@@ -634,25 +651,25 @@ enum ArtifactType {
 }
 
 model Portfolio {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  traineeId   String   @map("trainee_id") @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  tenantId  String @map("tenant_id") @db.Uuid
+  traineeId String @map("trainee_id") @db.Uuid
 
   title       String?
   status      PortfolioStatus @default(DRAFT)
-  summaryJson Json     @default("{}") @map("summary_json")
+  summaryJson Json            @default("{}") @map("summary_json")
 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trainee     User @relation(fields: [traineeId], references: [id], onDelete: Cascade)
-  artifacts   PortfolioArtifact[]
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trainee   User                @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  artifacts PortfolioArtifact[]
 
-  @@map("portfolios")
   @@index([tenantId])
   @@index([traineeId])
+  @@map("portfolios")
 }
 
 enum PortfolioStatus {
@@ -665,42 +682,42 @@ enum PortfolioStatus {
 
 // Join table: Portfolio <-> Artifact
 model PortfolioArtifact {
-  id          String   @id @default(uuid()) @db.Uuid
-  portfolioId String   @map("portfolio_id") @db.Uuid
-  artifactId  String   @map("artifact_id") @db.Uuid
+  id          String @id @default(uuid()) @db.Uuid
+  portfolioId String @map("portfolio_id") @db.Uuid
+  artifactId  String @map("artifact_id") @db.Uuid
 
-  order       Int      @default(0)
-  notes       String?  @db.Text
+  order Int     @default(0)
+  notes String? @db.Text
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  portfolio   Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
-  artifact    Artifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  artifact  Artifact  @relation(fields: [artifactId], references: [id], onDelete: Cascade)
 
   @@unique([portfolioId, artifactId])
-  @@map("portfolio_artifacts")
   @@index([portfolioId])
+  @@map("portfolio_artifacts")
 }
 
 model Attendance {
-  id          String   @id @default(uuid()) @db.Uuid
-  lessonId    String   @map("lesson_id") @db.Uuid
-  traineeId   String   @map("trainee_id") @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  lessonId  String @map("lesson_id") @db.Uuid
+  traineeId String @map("trainee_id") @db.Uuid
 
-  date        DateTime @db.Date
-  status      AttendanceStatus
-  minutes     Int?
+  date    DateTime         @db.Date
+  status  AttendanceStatus
+  minutes Int?
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  lesson      Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([lessonId, traineeId, date])
-  @@map("attendance")
   @@index([lessonId])
   @@index([traineeId])
+  @@map("attendance")
 }
 
 enum AttendanceStatus {
@@ -714,25 +731,69 @@ enum AttendanceStatus {
 // COMPLIANCE (Placeholder for Phase 1)
 // ============================================
 
-model DC3 {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  traineeId   String   @map("trainee_id") @db.Uuid
-  courseId    String   @map("course_id") @db.Uuid
+// Employer entity required by DC-3 law (Phase 2A)
+model Employer {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  serial      String   @unique
-  pdfRef      String?  @map("pdf_ref")
-  status      DC3Status @default(ISSUED)
+  businessName String  @map("business_name")
+  rfc          String?
+  legalName    String? @map("legal_name")
+  address      String? @db.Text
+  workCenter   String? @map("work_center") // Centro de trabajo
+  legalContact String? @map("legal_contact")
+  email        String?
+  phone        String?
 
-  issuedAt    DateTime @default(now()) @map("issued_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  course      Course @relation(fields: [courseId], references: [id])
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dc3Records DC3[]
 
-  @@map("dc3_records")
+  @@index([tenantId])
+  @@index([rfc])
+  @@map("employers")
+}
+
+model DC3 {
+  id         String  @id @default(uuid()) @db.Uuid
+  tenantId   String  @map("tenant_id") @db.Uuid
+  traineeId  String  @map("trainee_id") @db.Uuid
+  courseId   String  @map("course_id") @db.Uuid
+  employerId String? @map("employer_id") @db.Uuid
+
+  serial String    @unique
+  pdfRef String?   @map("pdf_ref")
+  status DC3Status @default(ISSUED)
+  folio  String? // STPS folio number
+
+  // Training details (denormalized for PDF generation)
+  hours     Int? // Training hours
+  modality  TrainingModality? // PRESENCIAL, MIXTA, EN_LINEA
+  startDate DateTime?         @map("start_date")
+  endDate   DateTime?         @map("end_date")
+
+  // Trainee PII (denormalized for PDF generation)
+  traineeName     String? @map("trainee_name")
+  traineeCurp     String? @map("trainee_curp")
+  traineeRfc      String? @map("trainee_rfc")
+  traineeJobTitle String? @map("trainee_job_title")
+
+  issuedAt DateTime @default(now()) @map("issued_at")
+
+  // Relations
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course   Course      @relation(fields: [courseId], references: [id])
+  employer Employer?   @relation(fields: [employerId], references: [id], onDelete: SetNull)
+  signers  DC3Signer[]
+
   @@index([tenantId])
   @@index([serial])
+  @@index([employerId])
+  @@index([folio])
+  @@map("dc3_records")
 }
 
 enum DC3Status {
@@ -740,40 +801,102 @@ enum DC3Status {
   REVOKED
 }
 
-model LFTPlan {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
+enum TrainingModality {
+  PRESENCIAL
+  MIXTA
+  EN_LINEA
+}
 
-  year        Int
-  businessUnit String  @map("business_unit")
-  programJson Json     @default("{}") @map("program_json")
+// DC-3 signature workflow (Phase 2A)
+model DC3Signer {
+  id    String @id @default(uuid()) @db.Uuid
+  dc3Id String @map("dc3_id") @db.Uuid
 
-  lockedAt    DateTime? @map("locked_at")
-  createdAt   DateTime @default(now()) @map("created_at")
+  role           DC3SignerRole
+  signerName     String        @map("signer_name")
+  signerPosition String?       @map("signer_position")
+  signatureRef   String?       @map("signature_ref") // S3 path or reference
+  signedAt       DateTime?     @map("signed_at")
+  order          Int           @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dc3 DC3 @relation(fields: [dc3Id], references: [id], onDelete: Cascade)
+
+  @@index([dc3Id])
+  @@map("dc3_signers")
+}
+
+enum DC3SignerRole {
+  EMPLEADOR
+  TRABAJADOR
+  ACE
+  SUPERVISOR
+}
+
+model LFTPlan {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  year             Int
+  businessUnit     String    @map("business_unit")
+  programJson      Json      @default("{}") @map("program_json")
+  version          Int       @default(1)
+  centrosTrabajo   String[]  @default([]) @map("centros_trabajo")
+  participantCount Int?      @map("participant_count")
+  approvedBy       String?   @map("approved_by") @db.Uuid
+  approvedAt       DateTime? @map("approved_at")
+
+  lockedAt  DateTime? @map("locked_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, year, businessUnit])
-  @@map("lft_plans")
   @@index([tenantId])
+  @@map("lft_plans")
 }
 
 model SIRCEExport {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  period      String
-  fileRef     String   @map("file_ref")
-  status      ExportStatus @default(PENDING)
+  period           String
+  fileRef          String       @map("file_ref")
+  status           ExportStatus @default(PENDING)
+  format           String       @default("csv") // csv, xml
+  recordCount      Int          @default(0) @map("record_count")
+  centroTrabajo    String?      @map("centro_trabajo") // STPS grouping
+  completedAt      DateTime?    @map("completed_at")
+  validationErrors Json         @default("[]") @map("validation_errors")
 
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  records SIRCEExportRecord[]
 
-  @@map("sirce_exports")
   @@index([tenantId])
+  @@map("sirce_exports")
+}
+
+// SIRCE Export ↔ DC3 join (Phase 2B)
+model SIRCEExportRecord {
+  id       String @id @default(uuid()) @db.Uuid
+  exportId String @map("export_id") @db.Uuid
+  dc3Id    String @map("dc3_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  export SIRCEExport @relation(fields: [exportId], references: [id], onDelete: Cascade)
+
+  @@unique([exportId, dc3Id])
+  @@index([exportId])
+  @@index([dc3Id])
+  @@map("sirce_export_records")
 }
 
 enum ExportStatus {
@@ -786,26 +909,59 @@ enum ExportStatus {
 // CREDENTIALS (Placeholder for Phase 2)
 // ============================================
 
-model Credential {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  traineeId   String   @map("trainee_id") @db.Uuid
+// Credential Issuer for OBv3 infrastructure (Phase 3A)
+model CredentialIssuer {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  type        CredentialType @default(OBV3)
-  payloadJson Json     @default("{}") @map("payload_json")
-  status      CredentialStatus @default(ACTIVE)
+  did            String  @unique // Decentralized Identifier
+  publicKeyUrl   String? @map("public_key_url")
+  publicKeyPem   String? @map("public_key_pem") @db.Text
+  privateKeyPath String? @map("private_key_path")
+  name           String
+  description    String? @db.Text
+  logoUrl        String? @map("logo_url")
+  statusListUrl  String? @map("status_list_url")
 
-  issuedAt    DateTime @default(now()) @map("issued_at")
-  expiresAt   DateTime? @map("expires_at")
-  revokedAt   DateTime? @map("revoked_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  trainee     User @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  tenant        Tenant                  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  credentials   Credential[]
+  statusEntries CredentialStatusEntry[]
 
-  @@map("credentials")
+  @@index([tenantId])
+  @@index([did])
+  @@map("credential_issuers")
+}
+
+model Credential {
+  id        String  @id @default(uuid()) @db.Uuid
+  tenantId  String  @map("tenant_id") @db.Uuid
+  traineeId String  @map("trainee_id") @db.Uuid
+  issuerId  String? @map("issuer_id") @db.Uuid
+
+  type        CredentialType   @default(OBV3)
+  payloadJson Json             @default("{}") @map("payload_json")
+  status      CredentialStatus @default(ACTIVE)
+  ecCodes     String[]         @default([]) @map("ec_codes") // EC alignment, denormalized
+
+  issuedAt  DateTime  @default(now()) @map("issued_at")
+  expiresAt DateTime? @map("expires_at")
+  revokedAt DateTime? @map("revoked_at")
+
+  // Relations
+  tenant      Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  trainee     User                   @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  issuer      CredentialIssuer?      @relation(fields: [issuerId], references: [id], onDelete: SetNull)
+  statusEntry CredentialStatusEntry?
+  evidence    CredentialEvidence[]
+
   @@index([tenantId])
   @@index([traineeId])
+  @@index([issuerId])
+  @@map("credentials")
 }
 
 enum CredentialType {
@@ -819,220 +975,367 @@ enum CredentialStatus {
   EXPIRED
 }
 
+// Credential revocation tracking (Phase 3A)
+model CredentialStatusEntry {
+  id           String @id @default(uuid()) @db.Uuid
+  issuerId     String @map("issuer_id") @db.Uuid
+  credentialId String @unique @map("credential_id") @db.Uuid
+
+  status    CredentialStatus @default(ACTIVE)
+  reason    String?          @db.Text
+  revokedAt DateTime?        @map("revoked_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  issuer     CredentialIssuer @relation(fields: [issuerId], references: [id], onDelete: Cascade)
+  credential Credential       @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+
+  @@index([issuerId])
+  @@index([credentialId])
+  @@map("credential_status_entries")
+}
+
+// Credential ↔ Artifact evidence join (Phase 3B)
+model CredentialEvidence {
+  id           String @id @default(uuid()) @db.Uuid
+  credentialId String @map("credential_id") @db.Uuid
+  artifactId   String @map("artifact_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  credential Credential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  artifact   Artifact   @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  @@unique([credentialId, artifactId])
+  @@index([credentialId])
+  @@index([artifactId])
+  @@map("credential_evidence")
+}
+
 // ============================================
 // RENEC DATA (CONOCER Registry)
 // ============================================
 
 // EC Standards from RENEC (cached/synced from CONOCER)
 model RenecEC {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Core EC identifiers
-  ecClave       String   @unique @map("ec_clave") // e.g., "EC0217.01"
-  titulo        String
-  version       String   @default("01")
+  ecClave String @unique @map("ec_clave") // e.g., "EC0217.01"
+  titulo  String
+  version String @default("01")
 
   // Status
-  vigente       Boolean  @default(true)
+  vigente          Boolean   @default(true)
   fechaPublicacion DateTime? @map("fecha_publicacion")
   fechaFinVigencia DateTime? @map("fecha_fin_vigencia")
 
   // Classification
-  sector        String?
-  nivelCompetencia Int?  @map("nivel_competencia") // 1-5
+  sector           String?
+  nivelCompetencia Int?    @map("nivel_competencia") // 1-5
+
+  // Committee & Sector FKs (Phase 1A)
+  committeeId String? @map("committee_id") @db.Uuid
+  sectorId    String? @map("sector_id") @db.Uuid
+
+  // Additional metadata from extraction
+  descripcion         String?   @db.Text
+  fechaPublicacionDOF DateTime? @map("fecha_publicacion_dof")
+  urlPDF              String?   @map("url_pdf")
 
   // Detailed structure (JSON for flexibility)
-  proposito     String?  @db.Text
-  competencias  Json     @default("[]") // Array of competency descriptions
-  elementosJson Json     @default("[]") @map("elementos_json") // Full element structure
-  critDesempeno Json     @default("[]") @map("crit_desempeno")
-  critConocimiento Json  @default("[]") @map("crit_conocimiento")
-  critProducto  Json     @default("[]") @map("crit_producto")
+  proposito        String? @db.Text
+  competencias     Json    @default("[]") // Array of competency descriptions
+  elementosJson    Json    @default("[]") @map("elementos_json") // Full element structure
+  critDesempeno    Json    @default("[]") @map("crit_desempeno")
+  critConocimiento Json    @default("[]") @map("crit_conocimiento")
+  critProducto     Json    @default("[]") @map("crit_producto")
 
   // Source tracking
-  sourceUrl     String?  @map("source_url")
-  contentHash   String?  @map("content_hash") // SHA256 for change detection
-  lastSyncedAt  DateTime @default(now()) @map("last_synced_at")
+  sourceUrl    String?  @map("source_url")
+  contentHash  String?  @map("content_hash") // SHA256 for change detection
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  accreditations RenecAccreditation[]
+  committee       RenecCommittee?       @relation(fields: [committeeId], references: [id], onDelete: SetNull)
+  sectorRef       RenecSector?          @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  occupations     RenecECOccupation[]
+  accreditations  RenecAccreditation[]
   centerOfferings RenecCenterOffering[]
 
-  @@map("renec_ec")
   @@index([ecClave])
   @@index([vigente])
   @@index([sector])
+  @@index([committeeId])
+  @@index([sectorId])
+  @@map("renec_ec")
 }
 
 // ECE/OC Certifying Entities from RENEC
 model RenecCertifier {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Core identifiers
-  certId        String   @unique @map("cert_id") // ID from RENEC
-  tipo          RenecCertifierType @default(ECE)
-  razonSocial   String   @map("razon_social")
-  nombreComercial String? @map("nombre_comercial")
+  certId          String             @unique @map("cert_id") // ID from RENEC
+  tipo            RenecCertifierType @default(ECE)
+  razonSocial     String             @map("razon_social")
+  nombreComercial String?            @map("nombre_comercial")
 
   // Status
-  activo        Boolean  @default(true)
+  activo Boolean @default(true)
+
+  // Deduplication (Phase 1A)
+  alternateNames String[] @default([]) @map("alternate_names")
+  normalizedKey  String?  @map("normalized_key")
 
   // Contact
-  direccion     String?  @db.Text
-  telefono      String?
-  email         String?
-  sitioWeb      String?  @map("sitio_web")
+  direccion String? @db.Text
+  telefono  String?
+  email     String?
+  sitioWeb  String? @map("sitio_web")
 
   // Legal
-  rfc           String?
+  rfc                String?
   representanteLegal String? @map("representante_legal")
 
   // Location (normalized)
-  estado        String?
-  estadoInegi   String?  @map("estado_inegi") // 2-digit INEGI code
-  municipio     String?
+  estado      String?
+  estadoInegi String? @map("estado_inegi") // 2-digit INEGI code
+  municipio   String?
 
   // Source tracking
-  sourceUrl     String?  @map("source_url")
-  contentHash   String?  @map("content_hash")
-  lastSyncedAt  DateTime @default(now()) @map("last_synced_at")
+  sourceUrl    String?  @map("source_url")
+  contentHash  String?  @map("content_hash")
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   accreditations RenecAccreditation[]
-  centers       RenecCenter[]
+  centers        RenecCenter[]
 
-  @@map("renec_certifiers")
   @@index([certId])
   @@index([tipo])
   @@index([activo])
   @@index([estadoInegi])
+  @@index([normalizedKey])
+  @@map("renec_certifiers")
 }
 
 enum RenecCertifierType {
   ECE // Entidad de Certificación y Evaluación
-  OC  // Organismo Certificador
+  OC // Organismo Certificador
 }
 
 // Accreditation relationship: Certifier <-> EC
 model RenecAccreditation {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  certifierId   String   @map("certifier_id") @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
+  certifierId String @map("certifier_id") @db.Uuid
+  ecId        String @map("ec_id") @db.Uuid
 
   // Accreditation details
   fechaAcreditacion DateTime? @map("fecha_acreditacion")
-  vigente       Boolean  @default(true)
+  vigente           Boolean   @default(true)
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  certifier     RenecCertifier @relation(fields: [certifierId], references: [id], onDelete: Cascade)
-  ec            RenecEC @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  certifier RenecCertifier @relation(fields: [certifierId], references: [id], onDelete: Cascade)
+  ec        RenecEC        @relation(fields: [ecId], references: [id], onDelete: Cascade)
 
   @@unique([certifierId, ecId])
-  @@map("renec_accreditations")
   @@index([certifierId])
   @@index([ecId])
+  @@map("renec_accreditations")
 }
 
 // Evaluation Centers from RENEC
 model RenecCenter {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Core identifiers
-  centerId      String   @unique @map("center_id") // ID from RENEC
-  certifierId   String?  @map("certifier_id") @db.Uuid // Parent ECE/OC
+  centerId    String  @unique @map("center_id") // ID from RENEC
+  certifierId String? @map("certifier_id") @db.Uuid // Parent ECE/OC
 
-  nombre        String
-  activo        Boolean  @default(true)
+  nombre String
+  activo Boolean @default(true)
+
+  // Deduplication (Phase 1A)
+  alternateNames String[] @default([]) @map("alternate_names")
+  normalizedKey  String?  @map("normalized_key")
 
   // Contact
-  direccion     String?  @db.Text
-  telefono      String?
-  email         String?
+  direccion String? @db.Text
+  telefono  String?
+  email     String?
 
   // Location (normalized)
-  estado        String?
-  estadoInegi   String?  @map("estado_inegi")
-  municipio     String?
-  codigoPostal  String?  @map("codigo_postal")
+  estado       String?
+  estadoInegi  String? @map("estado_inegi")
+  municipio    String?
+  codigoPostal String? @map("codigo_postal")
 
   // Geolocation (for map/distance queries)
-  latitud       Float?
-  longitud      Float?
-  geocodedAt    DateTime? @map("geocoded_at") // When lat/lng was resolved
+  latitud    Float?
+  longitud   Float?
+  geocodedAt DateTime? @map("geocoded_at") // When lat/lng was resolved
 
   // Source tracking
-  sourceUrl     String?  @map("source_url")
-  contentHash   String?  @map("content_hash")
-  lastSyncedAt  DateTime @default(now()) @map("last_synced_at")
+  sourceUrl    String?  @map("source_url")
+  contentHash  String?  @map("content_hash")
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  certifier     RenecCertifier? @relation(fields: [certifierId], references: [id], onDelete: SetNull)
-  offerings     RenecCenterOffering[]
+  certifier RenecCertifier?       @relation(fields: [certifierId], references: [id], onDelete: SetNull)
+  offerings RenecCenterOffering[]
 
-  @@map("renec_centers")
   @@index([centerId])
   @@index([certifierId])
   @@index([activo])
   @@index([estadoInegi])
   @@index([latitud, longitud])
+  @@index([normalizedKey])
+  @@map("renec_centers")
 }
 
 // Center EC offerings (which ECs a center can evaluate)
 model RenecCenterOffering {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  centerId      String   @map("center_id") @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
+  centerId String @map("center_id") @db.Uuid
+  ecId     String @map("ec_id") @db.Uuid
 
-  activo        Boolean  @default(true)
+  activo Boolean @default(true)
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  center        RenecCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
-  ec            RenecEC @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  center RenecCenter @relation(fields: [centerId], references: [id], onDelete: Cascade)
+  ec     RenecEC     @relation(fields: [ecId], references: [id], onDelete: Cascade)
 
   @@unique([centerId, ecId])
-  @@map("renec_center_offerings")
   @@index([centerId])
   @@index([ecId])
+  @@map("renec_center_offerings")
+}
+
+// RENEC Committee (Phase 1A - extracted but previously no table)
+model RenecCommittee {
+  id String @id @default(uuid()) @db.Uuid
+
+  committeeKey         String    @unique @map("committee_key") // e.g., "1.5.1"
+  nombre               String
+  presidente           String?
+  vicepresidente       String?
+  puestoPresidente     String?   @map("puesto_presidente")
+  puestoVicepresidente String?   @map("puesto_vicepresidente")
+  contacto             String?
+  correo               String?
+  telefonos            String?
+  url                  String?
+  calleNumero          String?   @map("calle_numero")
+  colonia              String?
+  codigoPostal         String?   @map("codigo_postal")
+  localidad            String?
+  delegacion           String?
+  entidad              String?
+  fechaIntegracion     DateTime? @map("fecha_integracion")
+  idTipoComite         Int?      @map("id_tipo_comite")
+
+  // Sector FK
+  sectorId String? @map("sector_id") @db.Uuid
+
+  // Source tracking
+  sourceUrl    String?  @map("source_url")
+  contentHash  String?  @map("content_hash")
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  sectorRef RenecSector? @relation(fields: [sectorId], references: [id], onDelete: SetNull)
+  ecs       RenecEC[]
+
+  @@index([committeeKey])
+  @@index([sectorId])
+  @@map("renec_committees")
+}
+
+// RENEC Sector (Phase 1A - previously only a string on RenecEC)
+model RenecSector {
+  id String @id @default(uuid()) @db.Uuid
+
+  sectorId Int    @unique @map("sector_id") // From CONOCER idSectorProductivo
+  nombre   String
+  tipo     String @default("productivo")
+
+  // Source tracking
+  sourceUrl    String?  @map("source_url")
+  contentHash  String?  @map("content_hash")
+  lastSyncedAt DateTime @default(now()) @map("last_synced_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  ecs        RenecEC[]
+  committees RenecCommittee[]
+
+  @@index([sectorId])
+  @@map("renec_sectors")
+}
+
+// RENEC EC Occupation join (Phase 1A - occupations extracted but previously lost)
+model RenecECOccupation {
+  id String @id @default(uuid()) @db.Uuid
+
+  ecId       String @map("ec_id") @db.Uuid
+  occupation String
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // Relations
+  ec RenecEC @relation(fields: [ecId], references: [id], onDelete: Cascade)
+
+  @@unique([ecId, occupation])
+  @@index([ecId])
+  @@map("renec_ec_occupations")
 }
 
 // Sync job tracking
 model RenecSyncJob {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  jobType       RenecSyncJobType @map("job_type")
-  status        RenecSyncStatus @default(PENDING)
+  jobType RenecSyncJobType @map("job_type")
+  status  RenecSyncStatus  @default(PENDING)
 
   // Statistics
-  itemsProcessed Int     @default(0) @map("items_processed")
-  itemsCreated  Int      @default(0) @map("items_created")
-  itemsUpdated  Int      @default(0) @map("items_updated")
-  itemsSkipped  Int      @default(0) @map("items_skipped")
-  errors        Json     @default("[]")
+  itemsProcessed Int  @default(0) @map("items_processed")
+  itemsCreated   Int  @default(0) @map("items_created")
+  itemsUpdated   Int  @default(0) @map("items_updated")
+  itemsSkipped   Int  @default(0) @map("items_skipped")
+  errors         Json @default("[]")
 
-  startedAt     DateTime? @map("started_at")
-  completedAt   DateTime? @map("completed_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("renec_sync_jobs")
   @@index([jobType])
   @@index([status])
   @@index([createdAt])
+  @@map("renec_sync_jobs")
 }
 
 enum RenecSyncJobType {
@@ -1054,46 +1357,46 @@ enum RenecSyncStatus {
 // ============================================
 
 model Lead {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Contact info
-  email         String
-  name          String?
-  phone         String?
-  company       String?
+  email   String
+  name    String?
+  phone   String?
+  company String?
 
   // Lead classification
-  leadType      LeadType @default(INDIVIDUAL) @map("lead_type")
-  source        String   @default("renec_explorer") // Source of the lead
+  leadType LeadType @default(INDIVIDUAL) @map("lead_type")
+  source   String   @default("renec_explorer") // Source of the lead
 
   // Interest tracking
-  interests     String[] @default([]) // Array: certification, training, dc3, compliance
+  interests String[] @default([]) // Array: certification, training, dc3, compliance
 
   // Context (what they were looking at)
-  ecCode        String?  @map("ec_code")
-  certifierId   String?  @map("certifier_id") @db.Uuid
-  centerId      String?  @map("center_id") @db.Uuid
+  ecCode      String? @map("ec_code")
+  certifierId String? @map("certifier_id") @db.Uuid
+  centerId    String? @map("center_id") @db.Uuid
 
   // UTM tracking
-  utmSource     String?  @map("utm_source")
-  utmMedium     String?  @map("utm_medium")
-  utmCampaign   String?  @map("utm_campaign")
+  utmSource   String? @map("utm_source")
+  utmMedium   String? @map("utm_medium")
+  utmCampaign String? @map("utm_campaign")
 
   // Status
-  status        LeadStatus @default(NEW)
-  notes         String?  @db.Text
+  status LeadStatus @default(NEW)
+  notes  String?    @db.Text
 
   // Timestamps
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  convertedAt   DateTime? @map("converted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  convertedAt DateTime? @map("converted_at")
 
-  @@map("leads")
   @@index([email])
   @@index([leadType])
   @@index([status])
   @@index([createdAt])
   @@index([ecCode])
+  @@map("leads")
 }
 
 enum LeadType {
@@ -1114,35 +1417,35 @@ enum LeadStatus {
 // ============================================
 
 model SearchAnalytics {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // What was searched
-  query         String?
-  searchType    SearchType @default(GENERAL) @map("search_type")
+  query      String?
+  searchType SearchType @default(GENERAL) @map("search_type")
 
   // Filters used
-  filters       Json     @default("{}") // { vigente, sector, estado, etc. }
+  filters Json @default("{}") // { vigente, sector, estado, etc. }
 
   // Results
-  resultCount   Int      @default(0) @map("result_count")
+  resultCount Int @default(0) @map("result_count")
 
   // User context (anonymous tracking)
-  sessionId     String?  @map("session_id")
-  userAgent     String?  @map("user_agent")
-  ipHash        String?  @map("ip_hash") // Hashed IP for privacy
+  sessionId String? @map("session_id")
+  userAgent String? @map("user_agent")
+  ipHash    String? @map("ip_hash") // Hashed IP for privacy
 
   // Location context
-  userLat       Float?   @map("user_lat")
-  userLng       Float?   @map("user_lng")
-  userEstado    String?  @map("user_estado")
+  userLat    Float?  @map("user_lat")
+  userLng    Float?  @map("user_lng")
+  userEstado String? @map("user_estado")
 
   // Timestamp
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  @@map("search_analytics")
   @@index([searchType])
   @@index([createdAt])
   @@index([query])
+  @@map("search_analytics")
 }
 
 enum SearchType {
@@ -1160,48 +1463,48 @@ enum SearchType {
 
 // Document template definitions (from EC0249 or other standards)
 model DocumentTemplate {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Template identification
-  templateCode  String   @unique @map("template_code") // e.g., "problem_description", "work_proposal"
-  title         String   // Spanish title for display
-  titleEn       String?  @map("title_en") // English title
+  templateCode String  @unique @map("template_code") // e.g., "problem_description", "work_proposal"
+  title        String // Spanish title for display
+  titleEn      String? @map("title_en") // English title
 
   // Classification
-  element       String   // EC element code (e.g., "E0875", "E0876", "E0877")
-  elementName   String   @map("element_name") // Element description
-  category      DocumentCategory @default(REQUIRED)
+  element     String // EC element code (e.g., "E0875", "E0876", "E0877")
+  elementName String           @map("element_name") // Element description
+  category    DocumentCategory @default(REQUIRED)
 
   // Metadata
-  icon          String?  // Emoji or icon identifier
-  description   String?  @db.Text
-  estimatedTime Int?     @map("estimated_time") // Minutes to complete
+  icon          String? // Emoji or icon identifier
+  description   String? @db.Text
+  estimatedTime Int?    @map("estimated_time") // Minutes to complete
 
   // Video support
-  videoId       String?  @map("video_id") // YouTube video ID
-  videoTitle    String?  @map("video_title")
+  videoId          String? @map("video_id") // YouTube video ID
+  videoTitle       String? @map("video_title")
   videoDescription String? @map("video_description") @db.Text
 
   // Evaluation criteria (JSON array of strings)
   evaluationCriteria Json @default("[]") @map("evaluation_criteria")
 
   // Section structure (JSON with section definitions)
-  sections      Json     @default("[]") // Array of section objects
+  sections Json @default("[]") // Array of section objects
 
   // Ordering and display
-  orderIndex    Int      @default(0) @map("order_index")
-  isActive      Boolean  @default(true) @map("is_active")
+  orderIndex Int     @default(0) @map("order_index")
+  isActive   Boolean @default(true) @map("is_active")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  documents     Document[]
+  documents Document[]
 
-  @@map("document_templates")
   @@index([element])
   @@index([templateCode])
   @@index([isActive])
+  @@map("document_templates")
 }
 
 enum DocumentCategory {
@@ -1212,45 +1515,45 @@ enum DocumentCategory {
 
 // User-created documents based on templates
 model Document {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  templateId    String   @map("template_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  tenantId   String @map("tenant_id") @db.Uuid
+  userId     String @map("user_id") @db.Uuid
+  templateId String @map("template_id") @db.Uuid
 
   // Document status
-  status        DocumentStatus @default(DRAFT)
-  title         String?  // Custom title (defaults to template title)
+  status DocumentStatus @default(DRAFT)
+  title  String? // Custom title (defaults to template title)
 
   // Content storage (JSON with section data)
-  content       Json     @default("{}") // { sectionId: { value, subsections } }
+  content Json @default("{}") // { sectionId: { value, subsections } }
 
   // Validation
-  validationScore Float?  @map("validation_score") // 0-100 percentage
-  validationErrors Json   @default("[]") @map("validation_errors")
-  isComplete    Boolean  @default(false) @map("is_complete")
+  validationScore  Float?  @map("validation_score") // 0-100 percentage
+  validationErrors Json    @default("[]") @map("validation_errors")
+  isComplete       Boolean @default(false) @map("is_complete")
 
   // Auto-save tracking
   lastAutoSavedAt DateTime? @map("last_auto_saved_at")
 
   // Version tracking
-  version       Int      @default(1)
+  version Int @default(1)
 
   // Export tracking
-  exportedAt    DateTime? @map("exported_at")
-  pdfPath       String?  @map("pdf_path") // S3 key for exported PDF
+  exportedAt DateTime? @map("exported_at")
+  pdfPath    String?   @map("pdf_path") // S3 key for exported PDF
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  submittedAt   DateTime? @map("submitted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  submittedAt DateTime? @map("submitted_at")
 
   // Relations
-  template      DocumentTemplate @relation(fields: [templateId], references: [id])
+  template DocumentTemplate @relation(fields: [templateId], references: [id])
 
-  @@map("documents")
   @@index([tenantId, userId])
   @@index([templateId])
   @@index([status])
   @@index([userId, status])
+  @@map("documents")
 }
 
 enum DocumentStatus {
@@ -1264,12 +1567,12 @@ enum DocumentStatus {
 
 // Document portfolio for certification readiness tracking
 model DocumentPortfolio {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  userId   String @map("user_id") @db.Uuid
 
   // Associated competency standard
-  ecCode        String?  @map("ec_code") // e.g., "EC0249"
+  ecCode String? @map("ec_code") // e.g., "EC0249"
 
   // Progress tracking
   element1Progress Float @default(0) @map("element1_progress") // 0-100
@@ -1278,16 +1581,16 @@ model DocumentPortfolio {
   overallProgress  Float @default(0) @map("overall_progress")
 
   // Certification readiness
-  isCertificationReady Boolean @default(false) @map("is_certification_ready")
+  isCertificationReady Boolean   @default(false) @map("is_certification_ready")
   readinessCheckedAt   DateTime? @map("readiness_checked_at")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, userId, ecCode])
-  @@map("document_portfolios")
   @@index([tenantId, userId])
   @@index([ecCode])
+  @@map("document_portfolios")
 }
 
 // ============================================
@@ -1296,68 +1599,71 @@ model DocumentPortfolio {
 
 // Quiz definition with questions
 model Quiz {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
   // Quiz identification
-  code          String   @unique // e.g., "fundamentals_assessment", "element1_assessment"
-  title         String
-  titleEn       String?  @map("title_en")
-  description   String?  @db.Text
+  code        String  @unique // e.g., "fundamentals_assessment", "element1_assessment"
+  title       String
+  titleEn     String? @map("title_en")
+  description String? @db.Text
 
   // Classification
-  moduleId      String?  @map("module_id") // e.g., "module1", "module2"
-  elementId     String?  @map("element_id") // EC element (e.g., "E0875")
-  category      QuizCategory @default(KNOWLEDGE_TEST)
+  moduleId  String?      @map("module_id") // e.g., "module1", "module2"
+  elementId String?      @map("element_id") // EC element (e.g., "E0875")
+  category  QuizCategory @default(KNOWLEDGE_TEST)
 
   // Configuration
-  timeLimit     Int?     @map("time_limit") // Time limit in seconds
-  passingScore  Int      @default(70) @map("passing_score") // Percentage required to pass
-  allowedAttempts Int    @default(3) @map("allowed_attempts")
+  timeLimit        Int?    @map("time_limit") // Time limit in seconds
+  passingScore     Int     @default(70) @map("passing_score") // Percentage required to pass
+  allowedAttempts  Int     @default(3) @map("allowed_attempts")
   shuffleQuestions Boolean @default(true) @map("shuffle_questions")
-  shuffleOptions Boolean @default(true) @map("shuffle_options")
-  showResults   Boolean  @default(true) @map("show_results") // Show results after completion
+  shuffleOptions   Boolean @default(true) @map("shuffle_options")
+  showResults      Boolean @default(true) @map("show_results") // Show results after completion
+
+  // Bridge to formal Assessment (Phase 4C)
+  assessmentId String? @map("assessment_id") @db.Uuid
 
   // Status
-  isActive      Boolean  @default(true) @map("is_active")
-  orderIndex    Int      @default(0) @map("order_index")
+  isActive   Boolean @default(true) @map("is_active")
+  orderIndex Int     @default(0) @map("order_index")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  questions     Question[]
-  attempts      QuizAttempt[]
+  questions Question[]
+  attempts  QuizAttempt[]
 
-  @@map("quizzes")
   @@index([tenantId])
   @@index([code])
   @@index([moduleId])
   @@index([elementId])
   @@index([isActive])
+  @@map("quizzes")
 }
 
 enum QuizCategory {
-  KNOWLEDGE_TEST      // Theoretical understanding
+  KNOWLEDGE_TEST // Theoretical understanding
   COMPETENCY_ASSESSMENT // EC0249 competency evaluation
-  PRACTICE_QUIZ       // Non-graded practice
-  DIAGNOSTIC          // Pre-assessment diagnostic
-  FINAL_EXAM          // Final certification exam
+  PRACTICE_QUIZ // Non-graded practice
+  DIAGNOSTIC // Pre-assessment diagnostic
+  FINAL_EXAM // Final certification exam
 }
 
 // Individual question within a quiz
 model Question {
-  id            String   @id @default(uuid()) @db.Uuid
-  quizId        String   @map("quiz_id") @db.Uuid
+  id     String @id @default(uuid()) @db.Uuid
+  quizId String @map("quiz_id") @db.Uuid
 
   // Question content
-  type          QuestionType
-  questionText  String   @map("question_text") @db.Text
-  explanation   String?  @db.Text // Explanation shown after answering
+  type         QuestionType
+  questionText String       @map("question_text") @db.Text
+  explanation  String?      @db.Text // Explanation shown after answering
 
   // Scoring
-  points        Int      @default(10)
-  competency    String?  // Competency being assessed (for competency scoring)
+  points     Int     @default(10)
+  competency String? // Competency being assessed (for competency scoring)
 
   // Type-specific data (stored as JSON)
   // For multiple_choice: { options: string[], correct: number }
@@ -1365,90 +1671,91 @@ model Question {
   // For short_answer: { sampleAnswer: string, keywords: string[] }
   // For essay: { rubric: Array<{criterion: string, maxPoints: number}> }
   // For matching: { pairs: Array<{left: string, right: string}> }
-  questionData  Json     @default("{}") @map("question_data")
+  questionData Json @default("{}") @map("question_data")
 
   // Ordering and display
-  orderIndex    Int      @default(0) @map("order_index")
-  isActive      Boolean  @default(true) @map("is_active")
+  orderIndex Int     @default(0) @map("order_index")
+  isActive   Boolean @default(true) @map("is_active")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  quiz          Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  responses     QuestionResponse[]
+  quiz      Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  responses QuestionResponse[]
 
-  @@map("questions")
   @@index([quizId, orderIndex])
   @@index([type])
   @@index([isActive])
+  @@map("questions")
 }
 
 enum QuestionType {
-  MULTIPLE_CHOICE  // Single correct answer from options
-  TRUE_FALSE       // Boolean true/false
-  SHORT_ANSWER     // Brief text response with keyword matching
-  ESSAY            // Long form response requiring manual review
-  MATCHING         // Match items from two columns
+  MULTIPLE_CHOICE // Single correct answer from options
+  TRUE_FALSE // Boolean true/false
+  SHORT_ANSWER // Brief text response with keyword matching
+  ESSAY // Long form response requiring manual review
+  MATCHING // Match items from two columns
 }
 
 // User's quiz attempt/session
 model QuizAttempt {
-  id            String   @id @default(uuid()) @db.Uuid
-  quizId        String   @map("quiz_id") @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
+  id           String  @id @default(uuid()) @db.Uuid
+  quizId       String  @map("quiz_id") @db.Uuid
+  userId       String  @map("user_id") @db.Uuid
+  tenantId     String  @map("tenant_id") @db.Uuid
+  assessmentId String? @map("assessment_id") @db.Uuid // Phase 4C bridge
 
   // Attempt status
-  status        QuizAttemptStatus @default(IN_PROGRESS)
+  status QuizAttemptStatus @default(IN_PROGRESS)
 
   // Timing
-  startedAt     DateTime @default(now()) @map("started_at")
-  completedAt   DateTime? @map("completed_at")
-  timeSpent     Int?     @map("time_spent") // Seconds spent on quiz
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  timeSpent   Int?      @map("time_spent") // Seconds spent on quiz
 
   // Scoring results (populated on completion)
-  totalPoints   Int?     @map("total_points")
-  maxPoints     Int?     @map("max_points")
-  percentage    Float?   // Score as percentage (0-100)
-  passed        Boolean? // Whether passing score was achieved
-  gradeLetter   String?  @map("grade_letter") // A, B, C, D, F
+  totalPoints Int?     @map("total_points")
+  maxPoints   Int?     @map("max_points")
+  percentage  Float? // Score as percentage (0-100)
+  passed      Boolean? // Whether passing score was achieved
+  gradeLetter String?  @map("grade_letter") // A, B, C, D, F
 
   // Detailed results (JSON)
   // { questionResults: Array<{questionId, isCorrect, points, maxPoints, response}> }
   // { competencyResults: { [competency]: { points, maxPoints, percentage, passed } } }
-  resultsData   Json     @default("{}") @map("results_data")
+  resultsData Json @default("{}") @map("results_data")
 
   // Scoring method used
-  scoringMethod String   @default("standard") @map("scoring_method") // standard, weighted, competency
+  scoringMethod String @default("standard") @map("scoring_method") // standard, weighted, competency
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  quiz          Quiz @relation(fields: [quizId], references: [id], onDelete: Cascade)
-  responses     QuestionResponse[]
+  quiz      Quiz               @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  responses QuestionResponse[]
 
-  @@map("quiz_attempts")
   @@index([quizId])
   @@index([userId])
   @@index([tenantId, userId])
   @@index([status])
   @@index([startedAt])
+  @@map("quiz_attempts")
 }
 
 enum QuizAttemptStatus {
-  IN_PROGRESS   // Currently taking quiz
-  COMPLETED     // Finished and scored
-  TIMED_OUT     // Time limit exceeded
-  ABANDONED     // User left without completing
+  IN_PROGRESS // Currently taking quiz
+  COMPLETED // Finished and scored
+  TIMED_OUT // Time limit exceeded
+  ABANDONED // User left without completing
 }
 
 // Individual question response within an attempt
 model QuestionResponse {
-  id            String   @id @default(uuid()) @db.Uuid
-  attemptId     String   @map("attempt_id") @db.Uuid
-  questionId    String   @map("question_id") @db.Uuid
+  id         String @id @default(uuid()) @db.Uuid
+  attemptId  String @map("attempt_id") @db.Uuid
+  questionId String @map("question_id") @db.Uuid
 
   // Response data (type depends on question type)
   // For multiple_choice: number (selected index)
@@ -1456,34 +1763,34 @@ model QuestionResponse {
   // For short_answer: string
   // For essay: string
   // For matching: Array<{left: string, right: string}>
-  response      Json     @default("{}")
+  response Json @default("{}")
 
   // Evaluation results
-  isCorrect     Boolean? @map("is_correct") // null for essay (requires manual review)
-  points        Int      @default(0)
-  maxPoints     Int      @map("max_points")
+  isCorrect Boolean? @map("is_correct") // null for essay (requires manual review)
+  points    Int      @default(0)
+  maxPoints Int      @map("max_points")
 
   // Manual review fields (for essay questions)
-  requiresReview Boolean @default(false) @map("requires_review")
-  reviewedBy    String?  @map("reviewed_by") @db.Uuid
-  reviewedAt    DateTime? @map("reviewed_at")
-  reviewNotes   String?  @map("review_notes") @db.Text
+  requiresReview Boolean   @default(false) @map("requires_review")
+  reviewedBy     String?   @map("reviewed_by") @db.Uuid
+  reviewedAt     DateTime? @map("reviewed_at")
+  reviewNotes    String?   @map("review_notes") @db.Text
 
   // Timing
-  timeSpent     Int?     @map("time_spent") // Seconds spent on question
-  answeredAt    DateTime @default(now()) @map("answered_at")
+  timeSpent  Int?     @map("time_spent") // Seconds spent on question
+  answeredAt DateTime @default(now()) @map("answered_at")
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  attempt       QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question      Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attempt  QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id], onDelete: Cascade)
 
   @@unique([attemptId, questionId])
-  @@map("question_responses")
   @@index([attemptId])
   @@index([questionId])
   @@index([requiresReview])
+  @@map("question_responses")
 }
 
 // ============================================
@@ -1492,177 +1799,208 @@ model QuestionResponse {
 
 // Achievement definition (template)
 model Achievement {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Achievement identification
-  code          String   @unique // e.g., "welcome", "first_video", "streak_7"
+  code          String  @unique // e.g., "welcome", "first_video", "streak_7"
   title         String
-  titleEn       String?  @map("title_en")
-  description   String   @db.Text
-  descriptionEn String?  @map("description_en") @db.Text
+  titleEn       String? @map("title_en")
+  description   String  @db.Text
+  descriptionEn String? @map("description_en") @db.Text
 
   // Classification
-  category      AchievementCategory @default(FIRST_STEPS)
-  rarity        AchievementRarity @default(COMMON)
+  category AchievementCategory @default(FIRST_STEPS)
+  rarity   AchievementRarity   @default(COMMON)
 
   // Display
-  icon          String   @default("🏆") // Emoji or icon identifier
+  icon String @default("🏆") // Emoji or icon identifier
 
   // Rewards
-  points        Int      @default(10)
+  points Int @default(10)
 
   // Unlock conditions (JSON array of condition strings)
   // e.g., ["videos_watched >= 1"], ["streak >= 7"], ["module1_completed"]
-  conditions    Json     @default("[]")
+  conditions Json @default("[]")
 
   // Status
-  isActive      Boolean  @default(true) @map("is_active")
-  orderIndex    Int      @default(0) @map("order_index")
+  isActive   Boolean @default(true) @map("is_active")
+  orderIndex Int     @default(0) @map("order_index")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
   userAchievements UserAchievement[]
 
-  @@map("achievements")
   @@index([category])
   @@index([rarity])
   @@index([isActive])
+  @@map("achievements")
 }
 
 enum AchievementCategory {
-  FIRST_STEPS   // Onboarding achievements
-  MODULES       // Module completion
-  STREAKS       // Learning streaks
-  PERFORMANCE   // Excellence achievements
-  COMPLETION    // Overall completion milestones
-  SOCIAL        // Community/social achievements
+  FIRST_STEPS // Onboarding achievements
+  MODULES // Module completion
+  STREAKS // Learning streaks
+  PERFORMANCE // Excellence achievements
+  COMPLETION // Overall completion milestones
+  SOCIAL // Community/social achievements
 }
 
 enum AchievementRarity {
-  COMMON        // Easy to obtain (10-25 points)
-  UNCOMMON      // Moderate effort (50-100 points)
-  RARE          // Significant effort (150-200 points)
-  LEGENDARY     // Major accomplishment (300-500 points)
+  COMMON // Easy to obtain (10-25 points)
+  UNCOMMON // Moderate effort (50-100 points)
+  RARE // Significant effort (150-200 points)
+  LEGENDARY // Major accomplishment (300-500 points)
 }
 
 // User's unlocked achievements
 model UserAchievement {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  achievementId String   @map("achievement_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
+  id            String @id @default(uuid()) @db.Uuid
+  userId        String @map("user_id") @db.Uuid
+  achievementId String @map("achievement_id") @db.Uuid
+  tenantId      String @map("tenant_id") @db.Uuid
 
   // Points awarded (may include streak multiplier)
-  pointsAwarded Int      @map("points_awarded")
+  pointsAwarded Int @map("points_awarded")
 
   // Timestamp
-  unlockedAt    DateTime @default(now()) @map("unlocked_at")
+  unlockedAt DateTime @default(now()) @map("unlocked_at")
 
   // Relations
-  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
 
   @@unique([userId, achievementId])
-  @@map("user_achievements")
   @@index([userId])
   @@index([achievementId])
   @@index([tenantId, userId])
   @@index([unlockedAt])
+  @@map("user_achievements")
 }
 
 // User gamification progress/stats
 model UserGamificationStats {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @unique @map("user_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @unique @map("user_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
   // Points and level
-  totalPoints   Int      @default(0) @map("total_points")
-  level         Int      @default(1)
+  totalPoints Int @default(0) @map("total_points")
+  level       Int @default(1)
 
   // Streak tracking
-  currentStreak Int      @default(0) @map("current_streak")
-  longestStreak Int      @default(0) @map("longest_streak")
+  currentStreak    Int       @default(0) @map("current_streak")
+  longestStreak    Int       @default(0) @map("longest_streak")
   lastActivityDate DateTime? @map("last_activity_date") @db.Date
 
   // Activity statistics (JSON for flexibility)
   // { videosWatched, lessonsCompleted, modulesCompleted, quizzesCompleted,
   //   documentsGenerated, perfectScores, totalTimeSpent }
-  stats         Json     @default("{}")
+  stats Json @default("{}")
 
   // Timestamps
-  firstVisit    DateTime? @map("first_visit")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  firstVisit DateTime? @map("first_visit")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  @@map("user_gamification_stats")
   @@index([tenantId])
   @@index([totalPoints])
   @@index([level])
   @@index([currentStreak])
+  @@map("user_gamification_stats")
 }
 
 // Daily activity log for streak tracking
 model DailyActivity {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
   // Activity date (one record per user per day)
-  activityDate  DateTime @map("activity_date") @db.Date
+  activityDate DateTime @map("activity_date") @db.Date
 
   // Activity summary for the day (JSON)
   // { videosWatched, lessonsCompleted, quizzesCompleted, documentsGenerated, timeSpent }
-  activities    Json     @default("{}")
+  activities Json @default("{}")
 
   // Points earned this day
-  pointsEarned  Int      @default(0) @map("points_earned")
+  pointsEarned Int @default(0) @map("points_earned")
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   @@unique([userId, activityDate])
-  @@map("daily_activities")
   @@index([userId])
   @@index([tenantId, userId])
   @@index([activityDate])
+  @@map("daily_activities")
 }
 
 // Leaderboard entries (cached/materialized view for performance)
 model LeaderboardEntry {
-  id            String   @id @default(uuid()) @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+  userId   String @map("user_id") @db.Uuid
 
   // Leaderboard type
   leaderboardType LeaderboardType @default(GLOBAL_POINTS) @map("leaderboard_type")
-  periodStart   DateTime? @map("period_start") // For weekly/monthly leaderboards
-  periodEnd     DateTime? @map("period_end")
+  periodStart     DateTime?       @map("period_start") // For weekly/monthly leaderboards
+  periodEnd       DateTime?       @map("period_end")
 
   // Ranking data
-  rank          Int
-  score         Int      // Points, streak days, etc.
-  previousRank  Int?     @map("previous_rank") // For rank change display
+  rank         Int
+  score        Int // Points, streak days, etc.
+  previousRank Int? @map("previous_rank") // For rank change display
 
   // User display info (denormalized for performance)
-  displayName   String   @map("display_name")
-  level         Int      @default(1)
+  displayName String @map("display_name")
+  level       Int    @default(1)
 
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, leaderboardType, userId, periodStart])
-  @@map("leaderboard_entries")
   @@index([tenantId, leaderboardType])
   @@index([leaderboardType, rank])
   @@index([userId])
+  @@map("leaderboard_entries")
 }
 
 enum LeaderboardType {
-  GLOBAL_POINTS   // All-time points ranking
-  WEEKLY_POINTS   // Weekly points ranking
-  MONTHLY_POINTS  // Monthly points ranking
-  STREAK_LENGTH   // Current streak ranking
-  ACHIEVEMENTS    // Achievement count ranking
+  GLOBAL_POINTS // All-time points ranking
+  WEEKLY_POINTS // Weekly points ranking
+  MONTHLY_POINTS // Monthly points ranking
+  STREAK_LENGTH // Current streak ranking
+  ACHIEVEMENTS // Achievement count ranking
+}
+
+// ============================================
+// INTER-RATER AGREEMENT (Phase 4B)
+// ============================================
+
+model EvaluatorAgreement {
+  id           String @id @default(uuid()) @db.Uuid
+  tenantId     String @map("tenant_id") @db.Uuid
+  assessmentId String @map("assessment_id") @db.Uuid
+  evaluator1Id String @map("evaluator1_id") @db.Uuid
+  evaluator2Id String @map("evaluator2_id") @db.Uuid
+
+  itemsCompared       Int   @map("items_compared")
+  kappaCoefficient    Float @map("kappa_coefficient")
+  percentageAgreement Float @map("percentage_agreement")
+  disagreements       Json  @default("[]") // Details of disagreements
+
+  calculatedAt DateTime @default(now()) @map("calculated_at")
+
+  // Relations
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  evaluator1 User       @relation("Evaluator1", fields: [evaluator1Id], references: [id])
+  evaluator2 User       @relation("Evaluator2", fields: [evaluator2Id], references: [id])
+
+  @@index([tenantId])
+  @@index([assessmentId])
+  @@index([evaluator1Id])
+  @@index([evaluator2Id])
+  @@map("evaluator_agreements")
 }
 
 // ============================================
@@ -1670,42 +2008,104 @@ enum LeaderboardType {
 // ============================================
 
 model Event {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  subjectType String   @map("subject_type")
-  subjectId   String   @map("subject_id") @db.Uuid
-  verb        String
-  dataJson    Json     @default("{}") @map("data_json")
+  subjectType String @map("subject_type")
+  subjectId   String @map("subject_id") @db.Uuid
+  verb        String // Use EventVerb values for consistency
+  dataJson    Json   @default("{}") @map("data_json")
 
-  timestamp   DateTime @default(now())
+  // Structured context (Phase 5A)
+  actorId     String? @map("actor_id") @db.Uuid
+  courseId    String? @map("course_id") @db.Uuid
+  ecCode      String? @map("ec_code")
+  criterionId String? @map("criterion_id")
+
+  timestamp DateTime @default(now())
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation("EventActor", fields: [actorId], references: [id], onDelete: SetNull)
 
-  @@map("events")
   @@index([tenantId, timestamp])
   @@index([subjectType, subjectId])
+  @@index([actorId])
+  @@index([verb])
+  @@index([courseId])
+  @@map("events")
+}
+
+// Recommended verb values for xAPI structured events (Phase 5A)
+enum EventVerb {
+  LAUNCHED
+  INITIALIZED
+  PROGRESSED
+  COMPLETED
+  PASSED
+  FAILED
+  SATISFIED_CRITERION
+  ARTIFACT_UPLOADED
+  ASSESSED
+  ENROLLED
+  UNENROLLED
 }
 
 model AuditLog {
-  id          String   @id @default(uuid()) @db.Uuid
-  tenantId    String   @map("tenant_id") @db.Uuid
-  actorId     String?  @map("actor_id") @db.Uuid
+  id       String  @id @default(uuid()) @db.Uuid
+  tenantId String  @map("tenant_id") @db.Uuid
+  actorId  String? @map("actor_id") @db.Uuid
 
-  action      String
-  target      String
-  diffJson    Json     @default("{}") @map("diff_json")
+  action   String
+  target   String
+  diffJson Json   @default("{}") @map("diff_json")
 
-  timestamp   DateTime @default(now())
+  timestamp DateTime @default(now())
 
   // Relations
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  actor       User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actor  User?  @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
-  @@map("audit_logs")
   @@index([tenantId, timestamp])
   @@index([actorId])
+  @@map("audit_logs")
+}
+
+// ============================================
+// LRS CONFIGURATION (xAPI/cmi5 - Phase 5B)
+// ============================================
+
+model LRSConfiguration {
+  id       String @id @default(uuid()) @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
+
+  endpoint         String
+  authType         LRSAuthType @default(BASIC) @map("auth_type")
+  username         String?
+  passwordHash     String?     @map("password_hash")
+  apiToken         String?     @map("api_token")
+  cmi5Enabled      Boolean     @default(false) @map("cmi5_enabled")
+  cmi5Endpoint     String?     @map("cmi5_endpoint")
+  batchSize        Int         @default(50) @map("batch_size")
+  batchIntervalSec Int         @default(300) @map("batch_interval_sec")
+  isActive         Boolean     @default(true) @map("is_active")
+  lastSyncAt       DateTime?   @map("last_sync_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([isActive])
+  @@map("lrs_configurations")
+}
+
+enum LRSAuthType {
+  BASIC
+  OAUTH2
+  TOKEN
 }
 
 // ============================================
@@ -1713,29 +2113,29 @@ model AuditLog {
 // ============================================
 
 model UserToken {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  provider      String   // 'janua', 'google', 'microsoft', etc.
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  provider String // 'janua', 'google', 'microsoft', etc.
 
   // Token data
-  accessToken   String   @map("access_token") @db.Text
-  refreshToken  String?  @map("refresh_token") @db.Text
-  idToken       String?  @map("id_token") @db.Text
+  accessToken  String  @map("access_token") @db.Text
+  refreshToken String? @map("refresh_token") @db.Text
+  idToken      String? @map("id_token") @db.Text
 
   // Token metadata
-  tokenType     String   @default("Bearer") @map("token_type")
-  scope         String?
-  expiresAt     DateTime? @map("expires_at")
+  tokenType String    @default("Bearer") @map("token_type")
+  scope     String?
+  expiresAt DateTime? @map("expires_at")
 
   // Timestamps
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, provider])
-  @@map("user_tokens")
   @@index([userId])
   @@index([provider])
   @@index([expiresAt])
+  @@map("user_tokens")
 }
 
 // ============================================
@@ -1743,31 +2143,31 @@ model UserToken {
 // ============================================
 
 model UserStreak {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
   // Streak data
-  streakType    String   @default("daily") @map("streak_type") // daily, weekly, etc.
-  currentCount  Int      @default(0) @map("current_count")
-  longestCount  Int      @default(0) @map("longest_count")
+  streakType   String @default("daily") @map("streak_type") // daily, weekly, etc.
+  currentCount Int    @default(0) @map("current_count")
+  longestCount Int    @default(0) @map("longest_count")
 
   // Tracking dates
   lastActivityAt DateTime? @map("last_activity_at")
-  streakStartAt DateTime? @map("streak_start_at")
+  streakStartAt  DateTime? @map("streak_start_at")
   streakBrokenAt DateTime? @map("streak_broken_at")
 
   // Freeze/protection
-  freezesUsed   Int      @default(0) @map("freezes_used")
-  freezesAvailable Int   @default(0) @map("freezes_available")
+  freezesUsed      Int @default(0) @map("freezes_used")
+  freezesAvailable Int @default(0) @map("freezes_available")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, streakType])
-  @@map("user_streaks")
   @@index([tenantId, userId])
   @@index([currentCount])
+  @@map("user_streaks")
 }
 
 // ============================================
@@ -1776,45 +2176,45 @@ model UserStreak {
 
 // EC Standard - Root configuration for each Estándar de Competencia
 model ECStandard {
-  id            String   @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
   // Identification
-  code          String   @unique // "EC0249", "EC0217"
-  version       String   @default("01")
+  code          String  @unique // "EC0249", "EC0217"
+  version       String  @default("01")
   title         String
-  titleEn       String?  @map("title_en")
-  description   String   @db.Text
-  descriptionEn String?  @map("description_en") @db.Text
+  titleEn       String? @map("title_en")
+  description   String  @db.Text
+  descriptionEn String? @map("description_en") @db.Text
 
   // Classification
-  issuer        String   @default("CONOCER")
-  sector        String?
-  level         Int      @default(3) // Competency level 1-5
+  issuer String  @default("CONOCER")
+  sector String?
+  level  Int     @default(3) // Competency level 1-5
 
   // Status
-  status        ECStandardStatus @default(DRAFT)
-  publishedAt   DateTime? @map("published_at")
-  deprecatedAt  DateTime? @map("deprecated_at")
+  status       ECStandardStatus @default(DRAFT)
+  publishedAt  DateTime?        @map("published_at")
+  deprecatedAt DateTime?        @map("deprecated_at")
 
   // Metadata
   estimatedHours Int     @default(40) @map("estimated_hours")
-  dc3Eligible   Boolean  @default(true) @map("dc3_eligible")
-  thumbnailUrl  String?  @map("thumbnail_url")
+  dc3Eligible    Boolean @default(true) @map("dc3_eligible")
+  thumbnailUrl   String? @map("thumbnail_url")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  elements      ECElement[]
-  modules       ECModule[]
-  templates     ECTemplate[]
-  assessments   ECAssessment[]
-  simulations   ECSimulation[]
-  enrollments   ECEnrollment[]
+  elements    ECElement[]
+  modules     ECModule[]
+  templates   ECTemplate[]
+  assessments ECAssessment[]
+  simulations ECSimulation[]
+  enrollments ECEnrollment[]
 
-  @@map("ec_standards")
   @@index([code])
   @@index([status])
+  @@map("ec_standards")
 }
 
 enum ECStandardStatus {
@@ -1825,75 +2225,75 @@ enum ECStandardStatus {
 
 // EC Element - Competency elements within a standard
 model ECElement {
-  id            String   @id @default(uuid()) @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
+  id   String @id @default(uuid()) @db.Uuid
+  ecId String @map("ec_id") @db.Uuid
 
-  code          String   // "E0875"
-  title         String
-  titleEn       String?  @map("title_en")
-  description   String   @db.Text
-  orderIndex    Int      @default(0) @map("order_index")
+  code        String // "E0875"
+  title       String
+  titleEn     String? @map("title_en")
+  description String  @db.Text
+  orderIndex  Int     @default(0) @map("order_index")
 
   // Requirements
-  requiredDocuments Int  @default(0) @map("required_documents")
-  requiredScore Int      @default(70) @map("required_score")
+  requiredDocuments Int @default(0) @map("required_documents")
+  requiredScore     Int @default(70) @map("required_score")
 
   // Criteria (JSON arrays)
   performanceCriteria Json @default("[]") @map("performance_criteria")
   knowledgeCriteria   Json @default("[]") @map("knowledge_criteria")
   productCriteria     Json @default("[]") @map("product_criteria")
 
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt DateTime @default(now()) @map("created_at")
 
   // Relations
-  ec            ECStandard @relation(fields: [ecId], references: [id], onDelete: Cascade)
-  templates     ECTemplate[]
+  ec             ECStandard        @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  templates      ECTemplate[]
   moduleElements ECModuleElement[]
 
   @@unique([ecId, code])
-  @@map("ec_elements")
   @@index([ecId])
+  @@map("ec_elements")
 }
 
 // EC Module - Training modules within a standard
 model ECModule {
-  id            String   @id @default(uuid()) @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
+  id   String @id @default(uuid()) @db.Uuid
+  ecId String @map("ec_id") @db.Uuid
 
-  code          String   // "module1", "fundamentals"
-  title         String
-  titleEn       String?  @map("title_en")
-  description   String?  @db.Text
-  icon          String?  // Emoji or icon
-  orderIndex    Int      @default(0) @map("order_index")
+  code        String // "module1", "fundamentals"
+  title       String
+  titleEn     String? @map("title_en")
+  description String? @db.Text
+  icon        String? // Emoji or icon
+  orderIndex  Int     @default(0) @map("order_index")
 
   // Requirements
-  estimatedMinutes Int   @default(60) @map("estimated_minutes")
-  isRequired    Boolean  @default(true) @map("is_required")
+  estimatedMinutes Int     @default(60) @map("estimated_minutes")
+  isRequired       Boolean @default(true) @map("is_required")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  ec            ECStandard @relation(fields: [ecId], references: [id], onDelete: Cascade)
-  lessons       ECLesson[]
-  assessments   ECAssessment[]
-  elements      ECModuleElement[]
-  progress      ECModuleProgress[]
+  ec          ECStandard         @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  lessons     ECLesson[]
+  assessments ECAssessment[]
+  elements    ECModuleElement[]
+  progress    ECModuleProgress[]
 
   @@unique([ecId, code])
-  @@map("ec_modules")
   @@index([ecId])
+  @@map("ec_modules")
 }
 
 // Many-to-many: Module <-> Element
 model ECModuleElement {
-  id            String   @id @default(uuid()) @db.Uuid
-  moduleId      String   @map("module_id") @db.Uuid
-  elementId     String   @map("element_id") @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  moduleId  String @map("module_id") @db.Uuid
+  elementId String @map("element_id") @db.Uuid
 
-  module        ECModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  element       ECElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  module  ECModule  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  element ECElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
 
   @@unique([moduleId, elementId])
   @@map("ec_module_elements")
@@ -1901,136 +2301,136 @@ model ECModuleElement {
 
 // EC Lesson - Individual lessons within a module
 model ECLesson {
-  id            String   @id @default(uuid()) @db.Uuid
-  moduleId      String   @map("module_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  moduleId String @map("module_id") @db.Uuid
 
-  code          String
-  title         String
-  titleEn       String?  @map("title_en")
-  orderIndex    Int      @default(0) @map("order_index")
+  code       String
+  title      String
+  titleEn    String? @map("title_en")
+  orderIndex Int     @default(0) @map("order_index")
 
   // Content (JSON with sections)
-  sections      Json     @default("[]")
+  sections Json @default("[]")
 
   // Media
-  videoId       String?  @map("video_id") // YouTube
-  videoDuration Int?     @map("video_duration") // Seconds
+  videoId       String? @map("video_id") // YouTube
+  videoDuration Int?    @map("video_duration") // Seconds
 
   // Requirements
-  estimatedMinutes Int   @default(15) @map("estimated_minutes")
-  isRequired    Boolean  @default(true) @map("is_required")
+  estimatedMinutes Int     @default(15) @map("estimated_minutes")
+  isRequired       Boolean @default(true) @map("is_required")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  module        ECModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  progress      ECLessonProgress[]
+  module   ECModule           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress ECLessonProgress[]
 
   @@unique([moduleId, code])
-  @@map("ec_lessons")
   @@index([moduleId])
+  @@map("ec_lessons")
 }
 
 // EC Template - Document templates for portfolio
 model ECTemplate {
-  id            String   @id @default(uuid()) @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
-  elementId     String   @map("element_id") @db.Uuid
+  id        String @id @default(uuid()) @db.Uuid
+  ecId      String @map("ec_id") @db.Uuid
+  elementId String @map("element_id") @db.Uuid
 
-  code          String   // "problem_description"
-  title         String
-  titleEn       String?  @map("title_en")
-  description   String?  @db.Text
+  code        String // "problem_description"
+  title       String
+  titleEn     String? @map("title_en")
+  description String? @db.Text
 
-  category      DocumentCategory @default(REQUIRED)
-  orderIndex    Int      @default(0) @map("order_index")
+  category   DocumentCategory @default(REQUIRED)
+  orderIndex Int              @default(0) @map("order_index")
 
   // Video support
   supportVideoId    String? @map("support_video_id")
   supportVideoTitle String? @map("support_video_title")
 
   // Structure (JSON with sections)
-  sections      Json     @default("[]")
+  sections Json @default("[]")
 
   // Evaluation
   evaluationCriteria Json @default("[]") @map("evaluation_criteria")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  ec            ECStandard @relation(fields: [ecId], references: [id], onDelete: Cascade)
-  element       ECElement @relation(fields: [elementId], references: [id], onDelete: Cascade)
-  documents     ECDocument[]
+  ec        ECStandard   @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  element   ECElement    @relation(fields: [elementId], references: [id], onDelete: Cascade)
+  documents ECDocument[]
 
   @@unique([ecId, code])
-  @@map("ec_templates")
   @@index([ecId])
   @@index([elementId])
+  @@map("ec_templates")
 }
 
 // EC Assessment - Quizzes and assessments
 model ECAssessment {
-  id            String   @id @default(uuid()) @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
-  moduleId      String?  @map("module_id") @db.Uuid
+  id       String  @id @default(uuid()) @db.Uuid
+  ecId     String  @map("ec_id") @db.Uuid
+  moduleId String? @map("module_id") @db.Uuid
 
-  code          String
-  title         String
-  titleEn       String?  @map("title_en")
+  code    String
+  title   String
+  titleEn String? @map("title_en")
 
-  category      QuizCategory @default(KNOWLEDGE_TEST)
-  timeLimit     Int?     @map("time_limit") // Seconds
-  passingScore  Int      @default(70) @map("passing_score")
-  allowedAttempts Int    @default(3) @map("allowed_attempts")
-  shuffleQuestions Boolean @default(true) @map("shuffle_questions")
-  shuffleOptions Boolean @default(true) @map("shuffle_options")
-  showResults   Boolean  @default(true) @map("show_results")
+  category         QuizCategory @default(KNOWLEDGE_TEST)
+  timeLimit        Int?         @map("time_limit") // Seconds
+  passingScore     Int          @default(70) @map("passing_score")
+  allowedAttempts  Int          @default(3) @map("allowed_attempts")
+  shuffleQuestions Boolean      @default(true) @map("shuffle_questions")
+  shuffleOptions   Boolean      @default(true) @map("shuffle_options")
+  showResults      Boolean      @default(true) @map("show_results")
 
   // Questions (JSON array)
-  questions     Json     @default("[]")
+  questions Json @default("[]")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  ec            ECStandard @relation(fields: [ecId], references: [id], onDelete: Cascade)
-  module        ECModule? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
-  attempts      ECAssessmentAttempt[]
+  ec       ECStandard            @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  module   ECModule?             @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  attempts ECAssessmentAttempt[]
 
   @@unique([ecId, code])
-  @@map("ec_assessments")
   @@index([ecId])
   @@index([moduleId])
+  @@map("ec_assessments")
 }
 
 // EC Simulation - Practice scenarios
 model ECSimulation {
-  id            String   @id @default(uuid()) @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
+  id   String @id @default(uuid()) @db.Uuid
+  ecId String @map("ec_id") @db.Uuid
 
-  code          String
-  title         String
-  titleEn       String?  @map("title_en")
-  description   String   @db.Text
+  code        String
+  title       String
+  titleEn     String? @map("title_en")
+  description String  @db.Text
 
-  type          SimulationType
+  type SimulationType
 
   // Scenario & rubric (JSON)
-  scenario      Json     @default("{}")
-  rubric        Json     @default("[]")
+  scenario Json @default("{}")
+  rubric   Json @default("[]")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   // Relations
-  ec            ECStandard @relation(fields: [ecId], references: [id], onDelete: Cascade)
-  attempts      ECSimulationAttempt[]
+  ec       ECStandard            @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  attempts ECSimulationAttempt[]
 
   @@unique([ecId, code])
-  @@map("ec_simulations")
   @@index([ecId])
+  @@map("ec_simulations")
 }
 
 enum SimulationType {
@@ -2046,32 +2446,32 @@ enum SimulationType {
 
 // EC Enrollment - User enrollment in an EC standard
 model ECEnrollment {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  ecId          String   @map("ec_id") @db.Uuid
-  tenantId      String   @map("tenant_id") @db.Uuid
+  id       String @id @default(uuid()) @db.Uuid
+  userId   String @map("user_id") @db.Uuid
+  ecId     String @map("ec_id") @db.Uuid
+  tenantId String @map("tenant_id") @db.Uuid
 
-  status        ECEnrollmentStatus @default(IN_PROGRESS)
+  status ECEnrollmentStatus @default(IN_PROGRESS)
 
-  enrolledAt    DateTime @default(now()) @map("enrolled_at")
-  completedAt   DateTime? @map("completed_at")
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at")
+  completedAt DateTime? @map("completed_at")
 
   // Progress summary (cached)
-  overallProgress Float  @default(0) @map("overall_progress") // 0-100
+  overallProgress Float @default(0) @map("overall_progress") // 0-100
 
   // Relations
-  ec            ECStandard @relation(fields: [ecId], references: [id], onDelete: Cascade)
-  moduleProgress ECModuleProgress[]
-  lessonProgress ECLessonProgress[]
-  documents     ECDocument[]
+  ec                 ECStandard            @relation(fields: [ecId], references: [id], onDelete: Cascade)
+  moduleProgress     ECModuleProgress[]
+  lessonProgress     ECLessonProgress[]
+  documents          ECDocument[]
   assessmentAttempts ECAssessmentAttempt[]
   simulationAttempts ECSimulationAttempt[]
 
   @@unique([userId, ecId])
-  @@map("ec_enrollments")
   @@index([userId])
   @@index([ecId])
   @@index([tenantId])
+  @@map("ec_enrollments")
 }
 
 enum ECEnrollmentStatus {
@@ -2083,137 +2483,137 @@ enum ECEnrollmentStatus {
 
 // EC Module Progress
 model ECModuleProgress {
-  id            String   @id @default(uuid()) @db.Uuid
-  enrollmentId  String   @map("enrollment_id") @db.Uuid
-  moduleId      String   @map("module_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
+  moduleId     String @map("module_id") @db.Uuid
 
-  progress      Float    @default(0) // 0-100
-  status        ProgressStatus @default(NOT_STARTED)
+  progress Float          @default(0) // 0-100
+  status   ProgressStatus @default(NOT_STARTED)
 
-  startedAt     DateTime? @map("started_at")
-  completedAt   DateTime? @map("completed_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
 
   // Relations
-  enrollment    ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  module        ECModule @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  enrollment ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  module     ECModule     @relation(fields: [moduleId], references: [id], onDelete: Cascade)
 
   @@unique([enrollmentId, moduleId])
-  @@map("ec_module_progress")
   @@index([enrollmentId])
+  @@map("ec_module_progress")
 }
 
 // EC Lesson Progress
 model ECLessonProgress {
-  id            String   @id @default(uuid()) @db.Uuid
-  enrollmentId  String   @map("enrollment_id") @db.Uuid
-  lessonId      String   @map("lesson_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
+  lessonId     String @map("lesson_id") @db.Uuid
 
   status        ProgressStatus @default(NOT_STARTED)
-  videoProgress Float    @default(0) @map("video_progress") // 0-100
+  videoProgress Float          @default(0) @map("video_progress") // 0-100
 
-  startedAt     DateTime? @map("started_at")
-  completedAt   DateTime? @map("completed_at")
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
 
   // Relations
-  enrollment    ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  lesson        ECLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollment ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson     ECLesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
 
   @@unique([enrollmentId, lessonId])
-  @@map("ec_lesson_progress")
   @@index([enrollmentId])
+  @@map("ec_lesson_progress")
 }
 
 // EC Document - User documents based on templates
 model ECDocument {
-  id            String   @id @default(uuid()) @db.Uuid
-  enrollmentId  String   @map("enrollment_id") @db.Uuid
-  templateId    String   @map("template_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
+  templateId   String @map("template_id") @db.Uuid
 
-  status        DocumentStatus @default(DRAFT)
-  title         String?
+  status DocumentStatus @default(DRAFT)
+  title  String?
 
   // Content (JSON)
-  content       Json     @default("{}")
+  content Json @default("{}")
 
   // Validation
-  validationScore Float? @map("validation_score") // 0-100
-  validationErrors Json  @default("[]") @map("validation_errors")
-  isComplete    Boolean  @default(false) @map("is_complete")
+  validationScore  Float?  @map("validation_score") // 0-100
+  validationErrors Json    @default("[]") @map("validation_errors")
+  isComplete       Boolean @default(false) @map("is_complete")
 
   // Versioning
-  version       Int      @default(1)
+  version Int @default(1)
 
   // Export
-  pdfPath       String?  @map("pdf_path")
-  exportedAt    DateTime? @map("exported_at")
+  pdfPath    String?   @map("pdf_path")
+  exportedAt DateTime? @map("exported_at")
 
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  submittedAt   DateTime? @map("submitted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  submittedAt DateTime? @map("submitted_at")
 
   // Relations
-  enrollment    ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  template      ECTemplate @relation(fields: [templateId], references: [id])
+  enrollment ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  template   ECTemplate   @relation(fields: [templateId], references: [id])
 
-  @@map("ec_documents")
   @@index([enrollmentId])
   @@index([templateId])
+  @@map("ec_documents")
 }
 
 // EC Assessment Attempt
 model ECAssessmentAttempt {
-  id            String   @id @default(uuid()) @db.Uuid
-  enrollmentId  String   @map("enrollment_id") @db.Uuid
-  assessmentId  String   @map("assessment_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
+  assessmentId String @map("assessment_id") @db.Uuid
 
-  status        QuizAttemptStatus @default(IN_PROGRESS)
+  status QuizAttemptStatus @default(IN_PROGRESS)
 
-  startedAt     DateTime @default(now()) @map("started_at")
-  completedAt   DateTime? @map("completed_at")
-  timeSpent     Int?     @map("time_spent") // Seconds
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
+  timeSpent   Int?      @map("time_spent") // Seconds
 
   // Results
-  score         Float?   // 0-100
-  passed        Boolean?
+  score  Float? // 0-100
+  passed Boolean?
 
   // Detailed results (JSON)
-  responses     Json     @default("[]")
+  responses Json @default("[]")
 
   // Relations
-  enrollment    ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  assessment    ECAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  enrollment ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  assessment ECAssessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
 
-  @@map("ec_assessment_attempts")
   @@index([enrollmentId])
   @@index([assessmentId])
+  @@map("ec_assessment_attempts")
 }
 
 // EC Simulation Attempt
 model ECSimulationAttempt {
-  id            String   @id @default(uuid()) @db.Uuid
-  enrollmentId  String   @map("enrollment_id") @db.Uuid
-  simulationId  String   @map("simulation_id") @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
+  enrollmentId String @map("enrollment_id") @db.Uuid
+  simulationId String @map("simulation_id") @db.Uuid
 
-  status        SimulationAttemptStatus @default(IN_PROGRESS)
+  status SimulationAttemptStatus @default(IN_PROGRESS)
 
-  startedAt     DateTime @default(now()) @map("started_at")
-  completedAt   DateTime? @map("completed_at")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  completedAt DateTime? @map("completed_at")
 
   // Results
-  score         Float?   // 0-100
-  passed        Boolean?
+  score  Float? // 0-100
+  passed Boolean?
 
   // Detailed results (JSON)
-  responses     Json     @default("[]")
-  feedback      Json     @default("{}")
+  responses Json @default("[]")
+  feedback  Json @default("{}")
 
   // Relations
-  enrollment    ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  simulation    ECSimulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
+  enrollment ECEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  simulation ECSimulation @relation(fields: [simulationId], references: [id], onDelete: Cascade)
 
-  @@map("ec_simulation_attempts")
   @@index([enrollmentId])
   @@index([simulationId])
+  @@map("ec_simulation_attempts")
 }
 
 enum SimulationAttemptStatus {

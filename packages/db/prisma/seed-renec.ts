@@ -4,8 +4,8 @@
  * Seeds the database with real RENEC data from extracted JSON files
  * at packages/renec-client/data/extracted/.
  *
- * Loads: EC Standards, Certifiers, Centers, Accreditations,
- *        Center Offerings, and Committee data.
+ * Loads: Sectors, Committees, EC Standards, Certifiers, Centers,
+ *        Accreditations, Center Offerings, and EC Occupations.
  *
  * Usage:
  *   pnpm db:seed:renec                    # Seed from extracted data
@@ -96,6 +96,8 @@ interface ExtractedCommittee {
   sectorProductivoStr: string | null;
   puestoPresidente: string | null;
   puestoVicepresidente: string | null;
+  fechaIntegracion: number | null;
+  idTipoComite: number | null;
   contacto: string | null;
   delegacionStr: string | null;
   entidadStr: string | null;
@@ -214,34 +216,199 @@ function loadJsonFile<T>(fileName: string, label: string): T | null {
   }
 }
 
-// ─── 1a. Seed EC Standards from ec_standards_api.json ────────────────────────
+// ─── Step 1: Seed Sectors from ec_standards_api.json ─────────────────────────
+
+async function seedSectors(
+  ecStandards: ExtractedEC[],
+  verbose: boolean,
+): Promise<Map<number, string>> {
+  // Build unique sector mapping from EC data: idSectorProductivo → secProductivo name
+  const sectorMap = new Map<number, string>();
+  for (const ec of ecStandards) {
+    const sectorIdInt = parseInt(ec.idSectorProductivo, 10);
+    if (!isNaN(sectorIdInt) && !sectorMap.has(sectorIdInt)) {
+      sectorMap.set(sectorIdInt, ec.secProductivo || `Sector ${sectorIdInt}`);
+    }
+  }
+
+  const sectorLookup = new Map<number, string>(); // sectorIdInt → DB UUID
+  const BATCH_SIZE = 50;
+  const entries = Array.from(sectorMap.entries());
+
+  for (let i = 0; i < entries.length; i += BATCH_SIZE) {
+    const batch = entries.slice(i, i + BATCH_SIZE);
+
+    const results = await prisma.$transaction(
+      batch.map(([sectorIdInt, nombre]) => {
+        const data = {
+          nombre,
+          tipo: "productivo",
+          sourceUrl: `https://conocer.gob.mx/conocer/#/renec`,
+          contentHash: contentHash({ sectorId: sectorIdInt, nombre }),
+          lastSyncedAt: new Date(),
+        };
+
+        return prisma.renecSector.upsert({
+          where: { sectorId: sectorIdInt },
+          update: data,
+          create: { sectorId: sectorIdInt, ...data },
+        });
+      }),
+    );
+
+    for (const result of results) {
+      sectorLookup.set(result.sectorId, result.id);
+    }
+
+    log(`Sectors batch ${i}-${i + batch.length} processed`, verbose);
+  }
+
+  return sectorLookup;
+}
+
+// ─── Step 2: Seed Committees from committees_complete.json ───────────────────
+
+async function seedCommittees(
+  committees: ExtractedCommittee[],
+  sectorLookup: Map<number, string>,
+  verbose: boolean,
+): Promise<Map<string, string>> {
+  const committeeLookup = new Map<string, string>(); // committeeKey → DB UUID
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < committees.length; i += BATCH_SIZE) {
+    const batch = committees.slice(i, i + BATCH_SIZE);
+
+    const results = await prisma.$transaction(
+      batch.map((committee) => {
+        const committeeKey = committee.clave;
+
+        // Resolve sector FK
+        const sectorDbId =
+          committee.idSectorProductivo != null
+            ? sectorLookup.get(committee.idSectorProductivo) ?? null
+            : null;
+
+        // Parse fechaIntegracion from epoch milliseconds
+        const fechaIntegracion =
+          committee.fechaIntegracion != null
+            ? new Date(committee.fechaIntegracion)
+            : null;
+
+        const data = {
+          nombre: committee.nombre || "",
+          presidente: committee.presidente ?? null,
+          vicepresidente: committee.vicepresidente ?? null,
+          puestoPresidente: committee.puestoPresidente ?? null,
+          puestoVicepresidente: committee.puestoVicepresidente ?? null,
+          contacto: committee.contacto ?? null,
+          correo: committee.correo ?? null,
+          telefonos: committee.telefonos ?? null,
+          url: committee.url ?? null,
+          calleNumero: committee.calleNumero ?? null,
+          colonia: committee.colonia ?? null,
+          codigoPostal:
+            committee.codigoPostal != null
+              ? String(committee.codigoPostal)
+              : null,
+          localidad: committee.localidad ?? null,
+          delegacion: committee.delegacionStr ?? null,
+          entidad: committee.entidadStr ?? null,
+          fechaIntegracion,
+          idTipoComite: committee.idTipoComite ?? null,
+          sectorId: sectorDbId,
+          sourceUrl: `https://conocer.gob.mx/conocer/#/renec`,
+          contentHash: contentHash(committee),
+          lastSyncedAt: new Date(),
+        };
+
+        return prisma.renecCommittee.upsert({
+          where: { committeeKey },
+          update: data,
+          create: { committeeKey, ...data },
+        });
+      }),
+    );
+
+    for (const result of results) {
+      committeeLookup.set(result.committeeKey, result.id);
+    }
+
+    log(`Committees batch ${i}-${i + batch.length} processed`, verbose);
+  }
+
+  return committeeLookup;
+}
+
+// ─── Step 3: Seed EC Standards from ec_standards_api.json ────────────────────
+
+// Pre-built reverse lookup: ecClave → committee key
+let _ecToCommitteeKeyCache: Map<string, string> | null = null;
+
+function buildEcToCommitteeKeyIndex(
+  committees: ExtractedCommittee[],
+): Map<string, string> {
+  if (!_ecToCommitteeKeyCache) {
+    _ecToCommitteeKeyCache = new Map();
+    for (const committee of committees) {
+      for (const ea of committee.estandaresAsociados ?? []) {
+        if (ea.codigo) {
+          _ecToCommitteeKeyCache.set(ea.codigo, committee.clave);
+        }
+      }
+    }
+  }
+  return _ecToCommitteeKeyCache;
+}
 
 async function seedECStandards(
   ecStandards: ExtractedEC[],
-  committeeLookup: Map<string, ExtractedCommittee>,
+  committees: ExtractedCommittee[],
   ecDetailsLookup: ECCertifiersAllFile["ec_details"] | null,
+  sectorLookup: Map<number, string>,
+  committeeLookup: Map<string, string>,
   verbose: boolean,
 ): Promise<{ created: number; updated: number; skipped: number }> {
   let created = 0;
-  let updated = 0;
-  let skipped = 0;
+  const updated = 0;
+  const skipped = 0;
+
+  // Build reverse index: ecClave → committeeKey
+  const ecToCommitteeKey = buildEcToCommitteeKeyIndex(committees);
 
   // Batch upsert using transactions for performance
   const BATCH_SIZE = 100;
 
+  // Collect EC DB IDs for occupation seeding afterwards
+  const ecDbIds = new Map<string, string>(); // ecClave → DB UUID
+
   for (let i = 0; i < ecStandards.length; i += BATCH_SIZE) {
     const batch = ecStandards.slice(i, i + BATCH_SIZE);
 
-    await prisma.$transaction(
+    const results = await prisma.$transaction(
       batch.map((ec) => {
         const ecClave = ec.codigo;
         if (!ecClave) return prisma.$queryRaw`SELECT 1`; // no-op
 
-        // Find committee data for this EC
-        const committeeData = findCommitteeForEC(ecClave, committeeLookup);
+        // Resolve committee FK via reverse index
+        const committeeKey = ecToCommitteeKey.get(ecClave) ?? null;
+        const committeeDbId = committeeKey
+          ? committeeLookup.get(committeeKey) ?? null
+          : null;
+
+        // Resolve sector FK
+        const sectorIdInt = parseInt(ec.idSectorProductivo, 10);
+        const sectorDbId = !isNaN(sectorIdInt)
+          ? sectorLookup.get(sectorIdInt) ?? null
+          : null;
 
         // Find occupations & committee members from ec_certifiers_all
         const ecDetail = ecDetailsLookup?.[ecClave] ?? null;
+
+        // Find committee data for competencias JSON
+        const committeeData = committeeKey
+          ? committees.find((c) => c.clave === committeeKey) ?? null
+          : null;
 
         const data = {
           titulo: ec.titulo || "",
@@ -250,11 +417,9 @@ async function seedECStandards(
           sector: ec.secProductivo || null,
           nivelCompetencia: ec.nivel ? parseInt(ec.nivel, 10) : null,
           proposito: null as string | null,
-          competencias: buildCompetenciasJson(
-            ec,
-            committeeData,
-            ecDetail,
-          ),
+          committeeId: committeeDbId,
+          sectorId: sectorDbId,
+          competencias: buildCompetenciasJson(ec, committeeData, ecDetail),
           elementosJson: [],
           critDesempeno: [],
           critConocimiento: [],
@@ -272,33 +437,55 @@ async function seedECStandards(
       }),
     );
 
+    // Collect DB UUIDs from upsert results
+    for (const result of results) {
+      if (result && typeof result === "object" && "ecClave" in result) {
+        const r = result as { id: string; ecClave: string };
+        ecDbIds.set(r.ecClave, r.id);
+      }
+    }
+
     const batchEnd = Math.min(i + BATCH_SIZE, ecStandards.length);
     log(`EC Standards batch ${i}-${batchEnd} processed`, verbose);
     created += batch.length; // approximation (upsert doesn't distinguish)
   }
 
-  return { created, updated, skipped };
-}
+  // Seed EC Occupations from ecDetailsLookup
+  if (ecDetailsLookup) {
+    let totalOccupations = 0;
+    const occupationPairs: { ecId: string; occupation: string }[] = [];
 
-// Pre-built reverse lookup: ecClave → committee
-let _ecToCommitteeCache: Map<string, ExtractedCommittee> | null = null;
+    for (const [ecClave, detail] of Object.entries(ecDetailsLookup)) {
+      const ecDbId = ecDbIds.get(ecClave);
+      if (!ecDbId) continue;
 
-function findCommitteeForEC(
-  ecClave: string,
-  committeeLookup: Map<string, ExtractedCommittee>,
-): ExtractedCommittee | null {
-  // Build reverse index on first call
-  if (!_ecToCommitteeCache) {
-    _ecToCommitteeCache = new Map();
-    for (const [, committee] of committeeLookup) {
-      for (const ea of committee.estandaresAsociados ?? []) {
-        if (ea.codigo) {
-          _ecToCommitteeCache.set(ea.codigo, committee);
+      for (const occupation of detail.occupations ?? []) {
+        if (occupation && occupation.trim().length > 0) {
+          occupationPairs.push({ ecId: ecDbId, occupation: occupation.trim() });
         }
       }
     }
+
+    const OCC_BATCH_SIZE = 200;
+    for (let i = 0; i < occupationPairs.length; i += OCC_BATCH_SIZE) {
+      const batch = occupationPairs.slice(i, i + OCC_BATCH_SIZE);
+
+      const result = await prisma.renecECOccupation.createMany({
+        data: batch,
+        skipDuplicates: true,
+      });
+
+      totalOccupations += result.count;
+      log(
+        `EC Occupations batch ${i}-${i + batch.length}: ${result.count} created`,
+        verbose,
+      );
+    }
+
+    console.log(`   EC Occupations: ${totalOccupations} created`);
   }
-  return _ecToCommitteeCache.get(ecClave) ?? null;
+
+  return { created, updated, skipped };
 }
 
 function buildCompetenciasJson(
@@ -330,7 +517,16 @@ function buildCompetenciasJson(
   };
 }
 
-// ─── 1b. Seed Certifiers from master_ece_registry.json ───────────────────────
+// ─── Step 4: Seed Certifiers from master_ece_registry.json ───────────────────
+
+function resolveCertifierTipo(entityType: string): "ECE" | "OC" {
+  const upper = (entityType || "").toUpperCase();
+  if (upper.includes("OC") || upper.includes("GOBIERNO")) {
+    return "OC";
+  }
+  // Default to ECE for "ECE", "Unknown", "SA de CV", "SC", or anything else
+  return "ECE";
+}
 
 async function seedCertifiers(
   registry: ExtractedCertifier[],
@@ -350,7 +546,9 @@ async function seedCertifiers(
           razonSocial: cert.canonical_name || "",
           nombreComercial: null as string | null,
           activo: true,
-          tipo: "ECE" as const,
+          tipo: resolveCertifierTipo(cert.entity_type),
+          alternateNames: cert.alternate_names ?? [],
+          normalizedKey: cert.normalized_key ?? null,
           sourceUrl: `https://conocer.gob.mx/conocer/#/renec`,
           contentHash: contentHash(cert),
           lastSyncedAt: new Date(),
@@ -371,7 +569,7 @@ async function seedCertifiers(
   return processed;
 }
 
-// ─── 1c. Seed Centers from master_ccap_registry.json ─────────────────────────
+// ─── Step 5: Seed Centers from master_ccap_registry.json ─────────────────────
 
 async function seedCenters(
   registry: ExtractedCenter[],
@@ -390,6 +588,8 @@ async function seedCenters(
         const data = {
           nombre: center.canonical_name || "",
           activo: true,
+          alternateNames: center.alternate_names ?? [],
+          normalizedKey: center.normalized_key ?? null,
           sourceUrl: `https://conocer.gob.mx/conocer/#/renec`,
           contentHash: contentHash(center),
           lastSyncedAt: new Date(),
@@ -410,7 +610,7 @@ async function seedCenters(
   return processed;
 }
 
-// ─── 1b. Seed Accreditations from ec_ece_matrix.json ─────────────────────────
+// ─── Step 6: Seed Accreditations from ec_ece_matrix.json ─────────────────────
 
 async function seedAccreditations(
   matrix: ECECEMatrixFile["matrix"],
@@ -485,7 +685,7 @@ async function seedAccreditations(
   return { created, skipped };
 }
 
-// ─── 1c. Seed Center Offerings from master_ccap_registry.json ────────────────
+// ─── Step 7: Seed Center Offerings from master_ccap_registry.json ────────────
 
 async function seedCenterOfferings(
   registry: ExtractedCenter[],
@@ -579,7 +779,7 @@ async function main() {
   const args = parseArgs();
   const startTime = new Date();
 
-  console.log("🌱 RENEC Production Seed\n");
+  console.log("🌱 RENEC Production Seed (Phase 1B)\n");
   console.log(`   Data directory: ${EXTRACTED_DATA_DIR}`);
   console.log("");
 
@@ -641,35 +841,68 @@ async function main() {
   }
 
   const validEcStandards: ExtractedEC[] = ecStandards;
-
-  // Build committee lookup (committee ID → committee object)
-  const committeeLookup = new Map<string, ExtractedCommittee>();
-  if (committees) {
-    for (const c of committees) {
-      committeeLookup.set(String(c.id), c);
-    }
-  }
+  const validCommittees: ExtractedCommittee[] = committees ?? [];
 
   const stats: Record<string, number> = {};
 
-  // ── Step 1: Seed EC Standards ────────────────────────────────────────────
+  // ── Step 1: Seed Sectors ───────────────────────────────────────────────
 
-  console.log("💾 Step 1/5: Seeding EC Standards...");
-  const ecResult = await seedECStandards(
-    validEcStandards,
-    committeeLookup,
-    ecCertifiersAll?.ec_details ?? null,
-    args.verbose,
-  );
-  console.log(
-    `   ✅ ${ecResult.created} EC Standards processed\n`,
-  );
-  stats.ecStandards = ecResult.created;
+  console.log("💾 Step 1/7: Seeding Sectors...");
+  const sectorLookup = await seedSectors(validEcStandards, args.verbose);
+  console.log(`   ✅ ${sectorLookup.size} Sectors processed\n`);
+  stats.sectors = sectorLookup.size;
 
-  // ── Step 2: Seed Certifiers ──────────────────────────────────────────────
+  // ── Step 2: Seed Committees ────────────────────────────────────────────
+
+  if (validCommittees.length > 0) {
+    console.log("💾 Step 2/7: Seeding Committees...");
+    const committeeLookup = await seedCommittees(
+      validCommittees,
+      sectorLookup,
+      args.verbose,
+    );
+    console.log(`   ✅ ${committeeLookup.size} Committees processed\n`);
+    stats.committees = committeeLookup.size;
+
+    // ── Step 3: Seed EC Standards ──────────────────────────────────────────
+
+    console.log("💾 Step 3/7: Seeding EC Standards...");
+    const ecResult = await seedECStandards(
+      validEcStandards,
+      validCommittees,
+      ecCertifiersAll?.ec_details ?? null,
+      sectorLookup,
+      committeeLookup,
+      args.verbose,
+    );
+    console.log(
+      `   ✅ ${ecResult.created} EC Standards processed\n`,
+    );
+    stats.ecStandards = ecResult.created;
+  } else {
+    console.log("⏭️  Step 2/7: Skipping Committees (no data)\n");
+
+    // Still seed EC Standards without committee lookup
+    console.log("💾 Step 3/7: Seeding EC Standards...");
+    const emptyCommitteeLookup = new Map<string, string>();
+    const ecResult = await seedECStandards(
+      validEcStandards,
+      validCommittees,
+      ecCertifiersAll?.ec_details ?? null,
+      sectorLookup,
+      emptyCommitteeLookup,
+      args.verbose,
+    );
+    console.log(
+      `   ✅ ${ecResult.created} EC Standards processed\n`,
+    );
+    stats.ecStandards = ecResult.created;
+  }
+
+  // ── Step 4: Seed Certifiers ──────────────────────────────────────────────
 
   if (certifierRegistry?.registry) {
-    console.log("💾 Step 2/5: Seeding Certifiers...");
+    console.log("💾 Step 4/7: Seeding Certifiers...");
     const certCount = await seedCertifiers(
       certifierRegistry.registry,
       args.verbose,
@@ -677,13 +910,13 @@ async function main() {
     console.log(`   ✅ ${certCount} Certifiers processed\n`);
     stats.certifiers = certCount;
   } else {
-    console.log("⏭️  Step 2/5: Skipping Certifiers (no data)\n");
+    console.log("⏭️  Step 4/7: Skipping Certifiers (no data)\n");
   }
 
-  // ── Step 3: Seed Centers ─────────────────────────────────────────────────
+  // ── Step 5: Seed Centers ─────────────────────────────────────────────────
 
   if (centerRegistry?.registry) {
-    console.log("💾 Step 3/5: Seeding Centers...");
+    console.log("💾 Step 5/7: Seeding Centers...");
     const centerCount = await seedCenters(
       centerRegistry.registry,
       args.verbose,
@@ -691,26 +924,26 @@ async function main() {
     console.log(`   ✅ ${centerCount} Centers processed\n`);
     stats.centers = centerCount;
   } else {
-    console.log("⏭️  Step 3/5: Skipping Centers (no data)\n");
+    console.log("⏭️  Step 5/7: Skipping Centers (no data)\n");
   }
 
-  // ── Step 4: Seed Accreditations ──────────────────────────────────────────
+  // ── Step 6: Seed Accreditations ──────────────────────────────────────────
 
   if (eceMatrix?.matrix) {
-    console.log("💾 Step 4/5: Seeding Accreditations (EC→Certifier)...");
+    console.log("💾 Step 6/7: Seeding Accreditations (EC→Certifier)...");
     const accResult = await seedAccreditations(eceMatrix.matrix, args.verbose);
     console.log(
       `   ✅ ${accResult.created} Accreditations created (${accResult.skipped} skipped)\n`,
     );
     stats.accreditations = accResult.created;
   } else {
-    console.log("⏭️  Step 4/5: Skipping Accreditations (no data)\n");
+    console.log("⏭️  Step 6/7: Skipping Accreditations (no data)\n");
   }
 
-  // ── Step 5: Seed Center Offerings ────────────────────────────────────────
+  // ── Step 7: Seed Center Offerings ────────────────────────────────────────
 
   if (centerRegistry?.registry) {
-    console.log("💾 Step 5/5: Seeding Center Offerings (Center→EC)...");
+    console.log("💾 Step 7/7: Seeding Center Offerings (Center→EC)...");
     const offerResult = await seedCenterOfferings(
       centerRegistry.registry,
       args.verbose,
@@ -720,7 +953,7 @@ async function main() {
     );
     stats.centerOfferings = offerResult.created;
   } else {
-    console.log("⏭️  Step 5/5: Skipping Center Offerings (no data)\n");
+    console.log("⏭️  Step 7/7: Skipping Center Offerings (no data)\n");
   }
 
   // ── Record sync job ──────────────────────────────────────────────────────
@@ -740,25 +973,40 @@ async function main() {
   console.log(`   Duration: ${duration}s\n`);
 
   // Get final counts from database
-  const [ecCount, certCount, centerCount, accCount, offeringCount, syncCount] =
-    await Promise.all([
-      prisma.renecEC.count(),
-      prisma.renecCertifier.count(),
-      prisma.renecCenter.count(),
-      prisma.renecAccreditation.count(),
-      prisma.renecCenterOffering.count(),
-      prisma.renecSyncJob.count(),
-    ]);
+  const [
+    ecCount,
+    certCount,
+    centerCount,
+    accCount,
+    offeringCount,
+    sectorCount,
+    committeeCount,
+    occupationCount,
+    syncCount,
+  ] = await Promise.all([
+    prisma.renecEC.count(),
+    prisma.renecCertifier.count(),
+    prisma.renecCenter.count(),
+    prisma.renecAccreditation.count(),
+    prisma.renecCenterOffering.count(),
+    prisma.renecSector.count(),
+    prisma.renecCommittee.count(),
+    prisma.renecECOccupation.count(),
+    prisma.renecSyncJob.count(),
+  ]);
 
   console.log("📈 Database State:");
+  console.log(`   RenecSector:          ${sectorCount}`);
+  console.log(`   RenecCommittee:       ${committeeCount}`);
   console.log(`   RenecEC:              ${ecCount}`);
+  console.log(`   RenecECOccupation:    ${occupationCount}`);
   console.log(`   RenecCertifier:       ${certCount}`);
   console.log(`   RenecCenter:          ${centerCount}`);
   console.log(`   RenecAccreditation:   ${accCount}`);
   console.log(`   RenecCenterOffering:  ${offeringCount}`);
   console.log(`   RenecSyncJob:         ${syncCount}`);
   console.log(
-    `   Total:                ${ecCount + certCount + centerCount + accCount + offeringCount + syncCount}`,
+    `   Total:                ${sectorCount + committeeCount + ecCount + occupationCount + certCount + centerCount + accCount + offeringCount + syncCount}`,
   );
   console.log("");
 }
