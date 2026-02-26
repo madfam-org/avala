@@ -1,94 +1,129 @@
 /**
  * RENEC Production Seed Script
  *
- * Seeds the database with real RENEC data from harvested JSON files
- * or triggers a live harvest if no cached data is available.
+ * Seeds the database with real RENEC data from extracted JSON files
+ * at packages/renec-client/data/extracted/.
+ *
+ * Loads: EC Standards, Certifiers, Centers, Accreditations,
+ *        Center Offerings, and Committee data.
  *
  * Usage:
- *   pnpm db:seed:renec                    # Seed from cached data
- *   pnpm db:seed:renec --fresh            # Harvest fresh data first
- *   pnpm db:seed:renec --data ./data      # Specify data directory
+ *   pnpm db:seed:renec                    # Seed from extracted data
+ *   pnpm db:seed:renec --verbose          # With verbose logging
  */
 
 import { PrismaClient } from "@prisma/client";
-import { existsSync, readFileSync, readdirSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync } from "fs";
+import { join, resolve } from "path";
+import { createHash } from "crypto";
 
 const prisma = new PrismaClient();
 
-interface CLIArgs {
-  dataDir: string;
-  fresh: boolean;
-  verbose: boolean;
+// Path to the extracted data from renec-client
+const EXTRACTED_DATA_DIR = resolve(
+  __dirname,
+  "../../renec-client/data/extracted",
+);
+
+// ─── Interfaces matching extracted JSON structures ───────────────────────────
+
+interface ExtractedEC {
+  idEstandarCompetencia: string;
+  idSectorProductivo: string;
+  codigo: string;
+  nivel: string;
+  titulo: string;
+  comite: string;
+  secProductivo: string;
 }
 
-interface ECStandard {
-  code?: string;
-  ecClave?: string;
-  title?: string;
-  titulo?: string;
-  version?: string;
-  active?: boolean;
-  vigente?: boolean;
-  sector?: string;
-  level?: number;
-  nivelCompetencia?: number;
-  purpose?: string;
-  proposito?: string;
-  url?: string;
-  sourceUrl?: string;
+interface ECECEMatrixFile {
+  generated_at: string;
+  total_ecs: number;
+  matrix: Record<
+    string,
+    {
+      ece_ids: string[];
+      ece_count: number;
+      title: string;
+    }
+  >;
 }
 
-interface Certifier {
-  id?: string;
-  certId?: string;
-  name?: string;
-  razonSocial?: string;
-  tradeName?: string;
-  nombreComercial?: string;
-  active?: boolean;
-  activo?: boolean;
-  address?: string;
-  direccion?: string;
-  phone?: string;
-  telefono?: string;
-  email?: string;
-  correo?: string;
-  website?: string;
-  sitioWeb?: string;
-  legalRep?: string;
-  representanteLegal?: string;
-  state?: string;
-  estado?: string;
-  url?: string;
-  sourceUrl?: string;
+interface ExtractedCertifier {
+  id: string; // "ECE-00001"
+  canonical_name: string;
+  alternate_names: string[];
+  normalized_key: string;
+  entity_type: string;
+  ec_codes: string[];
 }
 
-interface Center {
-  id?: string;
-  centerId?: string;
-  name?: string;
-  nombre?: string;
-  active?: boolean;
-  activo?: boolean;
-  address?: string;
-  direccion?: string;
-  phone?: string;
-  telefono?: string;
-  email?: string;
-  correo?: string;
-  state?: string;
-  estado?: string;
-  municipality?: string;
-  municipio?: string;
-  zipCode?: string;
-  codigoPostal?: string;
-  certifierId?: string;
-  url?: string;
-  sourceUrl?: string;
+interface CertifierRegistryFile {
+  generated_at: string;
+  total_count: number;
+  registry: ExtractedCertifier[];
 }
 
-// INEGI State codes mapping
+interface ExtractedCenter {
+  id: string; // "CCAP-00001"
+  canonical_name: string;
+  alternate_names: string[];
+  normalized_key: string;
+  ec_codes: string[];
+  ec_count: number;
+}
+
+interface CenterRegistryFile {
+  generated_at: string;
+  total_count: number;
+  registry: ExtractedCenter[];
+}
+
+interface ExtractedCommittee {
+  clave: string;
+  nombre: string;
+  presidente: string | null;
+  vicepresidente: string | null;
+  calleNumero: string | null;
+  colonia: string | null;
+  codigoPostal: number | null;
+  localidad: string | null;
+  telefonos: string | null;
+  correo: string | null;
+  url: string | null;
+  idSectorProductivo: number | null;
+  sectorProductivoStr: string | null;
+  puestoPresidente: string | null;
+  puestoVicepresidente: string | null;
+  contacto: string | null;
+  delegacionStr: string | null;
+  entidadStr: string | null;
+  estandaresAsociados: {
+    codigo: string;
+    titulo: string;
+  }[];
+  id: number;
+}
+
+interface ECCertifiersAllFile {
+  extraction_date: string;
+  summary: Record<string, unknown>;
+  failed_ecs: string[];
+  ec_details: Record<
+    string,
+    {
+      title: string;
+      certifiers: string[];
+      courses: string[];
+      occupations: string[];
+      committee_members: string[];
+    }
+  >;
+}
+
+// ─── INEGI State codes mapping ───────────────────────────────────────────────
+
 const ESTADO_INEGI_MAP: Record<string, string> = {
   Aguascalientes: "01",
   "Baja California": "02",
@@ -101,6 +136,7 @@ const ESTADO_INEGI_MAP: Record<string, string> = {
   "Ciudad de México": "09",
   CDMX: "09",
   "Distrito Federal": "09",
+  "CIUDAD DE MÉXICO": "09",
   Durango: "10",
   Guanajuato: "11",
   Guerrero: "12",
@@ -127,353 +163,409 @@ const ESTADO_INEGI_MAP: Record<string, string> = {
   Zacatecas: "32",
 };
 
+// ─── CLI ─────────────────────────────────────────────────────────────────────
+
+interface CLIArgs {
+  verbose: boolean;
+}
+
 function parseArgs(): CLIArgs {
   const args = process.argv.slice(2);
-  const result: CLIArgs = {
-    dataDir: "./data/renec",
-    fresh: false,
-    verbose: false,
+  return {
+    verbose: args.includes("--verbose") || args.includes("-v"),
   };
-
-  for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    const next = args[i + 1];
-
-    switch (arg) {
-      case "--data":
-      case "-d":
-        result.dataDir = next;
-        i++;
-        break;
-      case "--fresh":
-      case "-f":
-        result.fresh = true;
-        break;
-      case "--verbose":
-      case "-v":
-        result.verbose = true;
-        break;
-      case "--help":
-      case "-h":
-        printHelp();
-        process.exit(0);
-    }
-  }
-
-  return result;
 }
 
-function printHelp() {
-  console.log(`
-RENEC Production Seed Script
-
-Seeds the database with real RENEC (CONOCER) competency data.
-
-Usage:
-  pnpm db:seed:renec [options]
-
-Options:
-  -d, --data <dir>    Directory containing harvested JSON files (default: ./data/renec)
-  -f, --fresh         Run a fresh harvest before seeding
-  -v, --verbose       Enable verbose logging
-  -h, --help          Show this help message
-
-Data Files Expected:
-  - ec-standards.json     EC competency standards
-  - certifiers.json       Certification entities (ECE/OC)
-  - centers.json          Evaluation centers
-
-Examples:
-  # Seed from default data directory
-  pnpm db:seed:renec
-
-  # Seed from specific directory
-  pnpm db:seed:renec --data /path/to/renec/data
-
-  # Run fresh harvest first, then seed
-  pnpm db:seed:renec --fresh
-`);
-}
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function log(message: string, verbose: boolean) {
   if (verbose) {
-    console.log(`[${new Date().toISOString()}] ${message}`);
+    console.log(`  [${new Date().toISOString()}] ${message}`);
   }
 }
 
-function normalizeEstadoInegi(estado: string | null | undefined): string | null {
+function normalizeEstadoInegi(
+  estado: string | null | undefined,
+): string | null {
   if (!estado) return null;
   const normalized = estado.trim();
   return ESTADO_INEGI_MAP[normalized] || null;
 }
 
-function normalizePhone(phone: string | null | undefined): string | null {
-  if (!phone) return null;
-  const digits = phone.replace(/[^\d+]/g, "");
-  if (digits.startsWith("+")) return digits;
-  if (digits.length === 10) return `+52${digits}`;
-  return digits;
+function contentHash(obj: unknown): string {
+  return createHash("sha256")
+    .update(JSON.stringify(obj))
+    .digest("hex")
+    .slice(0, 16);
 }
 
-async function runFreshHarvest(dataDir: string): Promise<void> {
-  console.log("🌾 Running fresh RENEC harvest...");
-  console.log("   This may take several minutes.\n");
-
-  try {
-    // Dynamic import of the renec-client
-    const { harvestAll } = await import("@avala/renec-client");
-    const { writeFileSync, mkdirSync } = await import("fs");
-
-    // Ensure output directory exists
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-
-    const config = {
-      headless: true,
-      politeDelayMs: [800, 1500] as [number, number],
-    };
-
-    const data = await harvestAll(config);
-
-    // Save harvested data
-    const files = [
-      { name: "ec-standards.json", data: data.ecStandards },
-      { name: "certifiers.json", data: data.certifiers },
-      { name: "centers.json", data: data.centers },
-      { name: "sectors.json", data: data.sectors },
-      { name: "harvest-metadata.json", data: { harvestedAt: new Date().toISOString() } },
-    ];
-
-    for (const file of files) {
-      const path = join(dataDir, file.name);
-      writeFileSync(path, JSON.stringify(file.data, null, 2));
-      console.log(`   ✅ Saved ${file.name}`);
-    }
-
-    console.log("\n   Harvest complete!\n");
-  } catch (error) {
-    console.error("❌ Failed to run harvest:", error);
-    console.log("   Please run the harvest CLI separately:");
-    console.log("   cd packages/renec-client && pnpm harvest\n");
-    throw error;
-  }
-}
-
-function loadJsonFile<T>(filePath: string, name: string): T[] {
+function loadJsonFile<T>(fileName: string, label: string): T | null {
+  const filePath = join(EXTRACTED_DATA_DIR, fileName);
   if (!existsSync(filePath)) {
-    console.log(`   ⚠️  ${name} not found at ${filePath}`);
-    return [];
+    console.log(`   ⚠️  ${label} not found at ${filePath}`);
+    return null;
   }
-
   try {
     const content = readFileSync(filePath, "utf-8");
-    const data = JSON.parse(content);
-    return Array.isArray(data) ? data : [];
+    return JSON.parse(content) as T;
   } catch (error) {
-    console.log(`   ⚠️  Failed to parse ${name}:`, error);
-    return [];
+    console.log(`   ⚠️  Failed to parse ${label}:`, error);
+    return null;
   }
 }
 
-async function seedECStandards(ecStandards: ECStandard[], verbose: boolean): Promise<number> {
+// ─── 1a. Seed EC Standards from ec_standards_api.json ────────────────────────
+
+async function seedECStandards(
+  ecStandards: ExtractedEC[],
+  committeeLookup: Map<string, ExtractedCommittee>,
+  ecDetailsLookup: ECCertifiersAllFile["ec_details"] | null,
+  verbose: boolean,
+): Promise<{ created: number; updated: number; skipped: number }> {
   let created = 0;
   let updated = 0;
   let skipped = 0;
 
-  for (const ec of ecStandards) {
-    const ecClave = ec.code || ec.ecClave;
-    if (!ecClave) {
-      skipped++;
-      continue;
-    }
+  // Batch upsert using transactions for performance
+  const BATCH_SIZE = 100;
 
-    try {
-      const existing = await prisma.renecEC.findUnique({
-        where: { ecClave },
-      });
+  for (let i = 0; i < ecStandards.length; i += BATCH_SIZE) {
+    const batch = ecStandards.slice(i, i + BATCH_SIZE);
 
-      const data = {
-        titulo: ec.title || ec.titulo || "",
-        version: ec.version || "01",
-        vigente: ec.active !== false && ec.vigente !== false,
-        sector: ec.sector || null,
-        nivelCompetencia: ec.level || ec.nivelCompetencia || null,
-        proposito: ec.purpose || ec.proposito || null,
-        competencias: [],
-        elementosJson: [],
-        critDesempeno: [],
-        critConocimiento: [],
-        critProducto: [],
-        sourceUrl: ec.url || ec.sourceUrl || null,
-        lastSyncedAt: new Date(),
-      };
+    await prisma.$transaction(
+      batch.map((ec) => {
+        const ecClave = ec.codigo;
+        if (!ecClave) return prisma.$queryRaw`SELECT 1`; // no-op
 
-      if (existing) {
-        await prisma.renecEC.update({
+        // Find committee data for this EC
+        const committeeData = findCommitteeForEC(ecClave, committeeLookup);
+
+        // Find occupations & committee members from ec_certifiers_all
+        const ecDetail = ecDetailsLookup?.[ecClave] ?? null;
+
+        const data = {
+          titulo: ec.titulo || "",
+          version: "01",
+          vigente: true,
+          sector: ec.secProductivo || null,
+          nivelCompetencia: ec.nivel ? parseInt(ec.nivel, 10) : null,
+          proposito: null as string | null,
+          competencias: buildCompetenciasJson(
+            ec,
+            committeeData,
+            ecDetail,
+          ),
+          elementosJson: [],
+          critDesempeno: [],
+          critConocimiento: [],
+          critProducto: [],
+          sourceUrl: `https://conocer.gob.mx/conocer/#/renec`,
+          contentHash: contentHash(ec),
+          lastSyncedAt: new Date(),
+        };
+
+        return prisma.renecEC.upsert({
           where: { ecClave },
-          data,
+          update: data,
+          create: { ecClave, ...data },
         });
-        updated++;
-      } else {
-        await prisma.renecEC.create({
-          data: {
-            ecClave,
-            ...data,
-          },
-        });
-        created++;
-      }
+      }),
+    );
 
-      log(`EC ${ecClave}: ${existing ? "updated" : "created"}`, verbose);
-    } catch (error) {
-      log(`Error processing EC ${ecClave}: ${error}`, verbose);
-      skipped++;
-    }
+    const batchEnd = Math.min(i + BATCH_SIZE, ecStandards.length);
+    log(`EC Standards batch ${i}-${batchEnd} processed`, verbose);
+    created += batch.length; // approximation (upsert doesn't distinguish)
   }
 
-  return created + updated;
+  return { created, updated, skipped };
 }
 
-async function seedCertifiers(certifiers: Certifier[], verbose: boolean): Promise<number> {
-  let created = 0;
-  let updated = 0;
-  let skipped = 0;
+// Pre-built reverse lookup: ecClave → committee
+let _ecToCommitteeCache: Map<string, ExtractedCommittee> | null = null;
 
-  for (const cert of certifiers) {
-    const certId = cert.id || cert.certId;
-    if (!certId) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      const existing = await prisma.renecCertifier.findUnique({
-        where: { certId },
-      });
-
-      const estado = cert.state || cert.estado;
-      const data = {
-        razonSocial: cert.name || cert.razonSocial || "",
-        nombreComercial: cert.tradeName || cert.nombreComercial || null,
-        activo: cert.active !== false && cert.activo !== false,
-        direccion: cert.address || cert.direccion || null,
-        telefono: normalizePhone(cert.phone || cert.telefono),
-        email: cert.email || cert.correo || null,
-        sitioWeb: cert.website || cert.sitioWeb || null,
-        representanteLegal: cert.legalRep || cert.representanteLegal || null,
-        estado: estado || null,
-        estadoInegi: normalizeEstadoInegi(estado),
-        sourceUrl: cert.url || cert.sourceUrl || null,
-        lastSyncedAt: new Date(),
-      };
-
-      if (existing) {
-        await prisma.renecCertifier.update({
-          where: { certId },
-          data,
-        });
-        updated++;
-      } else {
-        await prisma.renecCertifier.create({
-          data: {
-            certId,
-            ...data,
-          },
-        });
-        created++;
-      }
-
-      log(`Certifier ${certId}: ${existing ? "updated" : "created"}`, verbose);
-    } catch (error) {
-      log(`Error processing certifier ${certId}: ${error}`, verbose);
-      skipped++;
-    }
-  }
-
-  return created + updated;
-}
-
-async function seedCenters(centers: Center[], verbose: boolean): Promise<number> {
-  let created = 0;
-  let updated = 0;
-  let skipped = 0;
-
-  for (const center of centers) {
-    const centerId = center.id || center.centerId;
-    if (!centerId) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      const existing = await prisma.renecCenter.findUnique({
-        where: { centerId },
-      });
-
-      const estado = center.state || center.estado;
-      const data = {
-        nombre: center.name || center.nombre || "",
-        activo: center.active !== false && center.activo !== false,
-        direccion: center.address || center.direccion || null,
-        telefono: normalizePhone(center.phone || center.telefono),
-        email: center.email || center.correo || null,
-        estado: estado || null,
-        estadoInegi: normalizeEstadoInegi(estado),
-        municipio: center.municipality || center.municipio || null,
-        codigoPostal: center.zipCode || center.codigoPostal || null,
-        sourceUrl: center.url || center.sourceUrl || null,
-        lastSyncedAt: new Date(),
-      };
-
-      // Link to certifier if provided
-      if (center.certifierId) {
-        const certifier = await prisma.renecCertifier.findUnique({
-          where: { certId: center.certifierId },
-        });
-        if (certifier) {
-          (data as Record<string, unknown>).certifierId = certifier.id;
+function findCommitteeForEC(
+  ecClave: string,
+  committeeLookup: Map<string, ExtractedCommittee>,
+): ExtractedCommittee | null {
+  // Build reverse index on first call
+  if (!_ecToCommitteeCache) {
+    _ecToCommitteeCache = new Map();
+    for (const [, committee] of committeeLookup) {
+      for (const ea of committee.estandaresAsociados ?? []) {
+        if (ea.codigo) {
+          _ecToCommitteeCache.set(ea.codigo, committee);
         }
       }
+    }
+  }
+  return _ecToCommitteeCache.get(ecClave) ?? null;
+}
 
-      if (existing) {
-        await prisma.renecCenter.update({
+function buildCompetenciasJson(
+  ec: ExtractedEC,
+  committee: ExtractedCommittee | null,
+  ecDetail: ECCertifiersAllFile["ec_details"][string] | null,
+): object {
+  return {
+    comite: ec.comite || null,
+    idSectorProductivo: ec.idSectorProductivo || null,
+    idEstandarCompetencia: ec.idEstandarCompetencia || null,
+    ...(committee
+      ? {
+          committeeKey: committee.clave || null,
+          committeeName: committee.nombre || null,
+          committeePresident: committee.presidente || null,
+          committeeContact: committee.correo || null,
+          committeeSector: committee.sectorProductivoStr || null,
+          committeeState: committee.entidadStr || null,
+        }
+      : {}),
+    ...(ecDetail
+      ? {
+          occupations: ecDetail.occupations || [],
+          courses: ecDetail.courses || [],
+          committeeMembers: ecDetail.committee_members || [],
+        }
+      : {}),
+  };
+}
+
+// ─── 1b. Seed Certifiers from master_ece_registry.json ───────────────────────
+
+async function seedCertifiers(
+  registry: ExtractedCertifier[],
+  verbose: boolean,
+): Promise<number> {
+  let processed = 0;
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < registry.length; i += BATCH_SIZE) {
+    const batch = registry.slice(i, i + BATCH_SIZE);
+
+    await prisma.$transaction(
+      batch.map((cert) => {
+        const certId = cert.id; // "ECE-00001"
+
+        const data = {
+          razonSocial: cert.canonical_name || "",
+          nombreComercial: null as string | null,
+          activo: true,
+          tipo: "ECE" as const,
+          sourceUrl: `https://conocer.gob.mx/conocer/#/renec`,
+          contentHash: contentHash(cert),
+          lastSyncedAt: new Date(),
+        };
+
+        return prisma.renecCertifier.upsert({
+          where: { certId },
+          update: data,
+          create: { certId, ...data },
+        });
+      }),
+    );
+
+    processed += batch.length;
+    log(`Certifiers batch ${i}-${i + batch.length} processed`, verbose);
+  }
+
+  return processed;
+}
+
+// ─── 1c. Seed Centers from master_ccap_registry.json ─────────────────────────
+
+async function seedCenters(
+  registry: ExtractedCenter[],
+  verbose: boolean,
+): Promise<number> {
+  let processed = 0;
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < registry.length; i += BATCH_SIZE) {
+    const batch = registry.slice(i, i + BATCH_SIZE);
+
+    await prisma.$transaction(
+      batch.map((center) => {
+        const centerId = center.id; // "CCAP-00001"
+
+        const data = {
+          nombre: center.canonical_name || "",
+          activo: true,
+          sourceUrl: `https://conocer.gob.mx/conocer/#/renec`,
+          contentHash: contentHash(center),
+          lastSyncedAt: new Date(),
+        };
+
+        return prisma.renecCenter.upsert({
           where: { centerId },
-          data,
+          update: data,
+          create: { centerId, ...data },
         });
-        updated++;
-      } else {
-        await prisma.renecCenter.create({
-          data: {
-            centerId,
-            ...data,
-          },
-        });
-        created++;
-      }
+      }),
+    );
 
-      log(`Center ${centerId}: ${existing ? "updated" : "created"}`, verbose);
-    } catch (error) {
-      log(`Error processing center ${centerId}: ${error}`, verbose);
-      skipped++;
+    processed += batch.length;
+    log(`Centers batch ${i}-${i + batch.length} processed`, verbose);
+  }
+
+  return processed;
+}
+
+// ─── 1b. Seed Accreditations from ec_ece_matrix.json ─────────────────────────
+
+async function seedAccreditations(
+  matrix: ECECEMatrixFile["matrix"],
+  verbose: boolean,
+): Promise<{ created: number; skipped: number }> {
+  let created = 0;
+  let skipped = 0;
+
+  // Pre-fetch all RenecEC and RenecCertifier IDs for fast lookup
+  console.log("   Building lookup tables...");
+  const allECs = await prisma.renecEC.findMany({
+    select: { id: true, ecClave: true },
+  });
+  const ecLookup = new Map(allECs.map((ec) => [ec.ecClave, ec.id]));
+
+  const allCerts = await prisma.renecCertifier.findMany({
+    select: { id: true, certId: true },
+  });
+  const certLookup = new Map(allCerts.map((c) => [c.certId, c.id]));
+
+  console.log(
+    `   Lookup: ${ecLookup.size} ECs, ${certLookup.size} Certifiers`,
+  );
+
+  // Collect all valid accreditation pairs
+  const pairs: { ecId: string; certifierId: string }[] = [];
+
+  for (const [ecClave, entry] of Object.entries(matrix)) {
+    const ecId = ecLookup.get(ecClave);
+    if (!ecId) {
+      log(`Accreditation skip: EC ${ecClave} not in DB`, verbose);
+      continue;
+    }
+
+    for (const eceId of entry.ece_ids) {
+      const certifierId = certLookup.get(eceId);
+      if (!certifierId) {
+        log(`Accreditation skip: Certifier ${eceId} not in DB`, verbose);
+        skipped++;
+        continue;
+      }
+      pairs.push({ ecId, certifierId });
     }
   }
 
-  return created + updated;
+  console.log(`   Inserting ${pairs.length} accreditation records...`);
+
+  // Batch insert accreditations
+  const BATCH_SIZE = 200;
+  for (let i = 0; i < pairs.length; i += BATCH_SIZE) {
+    const batch = pairs.slice(i, i + BATCH_SIZE);
+
+    // Use skipDuplicates to handle re-runs gracefully
+    const result = await prisma.renecAccreditation.createMany({
+      data: batch.map((p) => ({
+        certifierId: p.certifierId,
+        ecId: p.ecId,
+        vigente: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    created += result.count;
+    log(
+      `Accreditations batch ${i}-${i + batch.length}: ${result.count} created`,
+      verbose,
+    );
+  }
+
+  skipped = pairs.length - created;
+
+  return { created, skipped };
 }
 
+// ─── 1c. Seed Center Offerings from master_ccap_registry.json ────────────────
+
+async function seedCenterOfferings(
+  registry: ExtractedCenter[],
+  verbose: boolean,
+): Promise<{ created: number; skipped: number }> {
+  let created = 0;
+  let skipped = 0;
+
+  // Pre-fetch lookups
+  const allECs = await prisma.renecEC.findMany({
+    select: { id: true, ecClave: true },
+  });
+  const ecLookup = new Map(allECs.map((ec) => [ec.ecClave, ec.id]));
+
+  const allCenters = await prisma.renecCenter.findMany({
+    select: { id: true, centerId: true },
+  });
+  const centerLookup = new Map(allCenters.map((c) => [c.centerId, c.id]));
+
+  // Collect all valid offering pairs
+  const pairs: { centerId: string; ecId: string }[] = [];
+
+  for (const center of registry) {
+    const centerDbId = centerLookup.get(center.id);
+    if (!centerDbId) continue;
+
+    for (const ecCode of center.ec_codes) {
+      const ecId = ecLookup.get(ecCode);
+      if (!ecId) {
+        log(`Offering skip: EC ${ecCode} not in DB`, verbose);
+        skipped++;
+        continue;
+      }
+      pairs.push({ centerId: centerDbId, ecId });
+    }
+  }
+
+  console.log(`   Inserting ${pairs.length} center offering records...`);
+
+  const BATCH_SIZE = 200;
+  for (let i = 0; i < pairs.length; i += BATCH_SIZE) {
+    const batch = pairs.slice(i, i + BATCH_SIZE);
+
+    const result = await prisma.renecCenterOffering.createMany({
+      data: batch.map((p) => ({
+        centerId: p.centerId,
+        ecId: p.ecId,
+        activo: true,
+      })),
+      skipDuplicates: true,
+    });
+
+    created += result.count;
+    log(
+      `Offerings batch ${i}-${i + batch.length}: ${result.count} created`,
+      verbose,
+    );
+  }
+
+  skipped = pairs.length - created + skipped;
+
+  return { created, skipped };
+}
+
+// ─── Sync Job Record ─────────────────────────────────────────────────────────
+
 async function createSyncJobRecord(
-  itemsProcessed: number,
+  stats: Record<string, number>,
   startTime: Date,
 ): Promise<void> {
+  const totalProcessed = Object.values(stats).reduce((a, b) => a + b, 0);
+
   await prisma.renecSyncJob.create({
     data: {
       jobType: "FULL_SYNC",
       status: "COMPLETED",
       startedAt: startTime,
       completedAt: new Date(),
-      itemsProcessed,
-      itemsCreated: itemsProcessed,
+      itemsProcessed: totalProcessed,
+      itemsCreated: totalProcessed,
       itemsUpdated: 0,
       itemsSkipped: 0,
       errors: [],
@@ -481,103 +573,194 @@ async function createSyncJobRecord(
   });
 }
 
+// ─── Main ────────────────────────────────────────────────────────────────────
+
 async function main() {
   const args = parseArgs();
   const startTime = new Date();
 
   console.log("🌱 RENEC Production Seed\n");
-  console.log(`   Data directory: ${args.dataDir}`);
-  console.log(`   Fresh harvest: ${args.fresh}`);
+  console.log(`   Data directory: ${EXTRACTED_DATA_DIR}`);
   console.log("");
 
-  // Run fresh harvest if requested
-  if (args.fresh) {
-    await runFreshHarvest(args.dataDir);
-  }
-
-  // Check if data directory exists
-  if (!existsSync(args.dataDir)) {
-    console.log(`❌ Data directory not found: ${args.dataDir}`);
-    console.log("   Run with --fresh to harvest data first, or specify a valid --data directory.\n");
+  // Verify data directory exists
+  if (!existsSync(EXTRACTED_DATA_DIR)) {
+    console.log(`❌ Extracted data directory not found: ${EXTRACTED_DATA_DIR}`);
+    console.log(
+      "   Run the RENEC extractor first: cd packages/renec-client && pnpm extract\n",
+    );
     process.exit(1);
   }
 
-  // List available data files
-  const files = readdirSync(args.dataDir).filter((f) => f.endsWith(".json"));
-  console.log(`   Found ${files.length} JSON files: ${files.join(", ")}\n`);
+  // ── Load all data files ──────────────────────────────────────────────────
 
-  // Load data files
   console.log("📂 Loading data files...");
-  const ecStandards = loadJsonFile<ECStandard>(
-    join(args.dataDir, "ec-standards.json"),
-    "EC Standards",
+
+  const ecStandards = loadJsonFile<ExtractedEC[]>(
+    "ec_standards_api.json",
+    "EC Standards API",
   );
-  const certifiers = loadJsonFile<Certifier>(
-    join(args.dataDir, "certifiers.json"),
-    "Certifiers",
+  const eceMatrix = loadJsonFile<ECECEMatrixFile>(
+    "ec_ece_matrix.json",
+    "EC-ECE Matrix",
   );
-  const centers = loadJsonFile<Center>(
-    join(args.dataDir, "centers.json"),
-    "Centers",
+  const certifierRegistry = loadJsonFile<CertifierRegistryFile>(
+    "master_ece_registry.json",
+    "Certifier Registry",
+  );
+  const centerRegistry = loadJsonFile<CenterRegistryFile>(
+    "master_ccap_registry.json",
+    "Center Registry",
+  );
+  const committees = loadJsonFile<ExtractedCommittee[]>(
+    "committees_complete.json",
+    "Committees",
+  );
+  const ecCertifiersAll = loadJsonFile<ECCertifiersAllFile>(
+    "ec_certifiers_all.json",
+    "EC Certifiers All",
   );
 
-  console.log(`   EC Standards: ${ecStandards.length}`);
-  console.log(`   Certifiers: ${certifiers.length}`);
-  console.log(`   Centers: ${centers.length}\n`);
+  console.log(`   EC Standards:  ${ecStandards?.length ?? 0}`);
+  console.log(`   Certifiers:    ${certifierRegistry?.registry?.length ?? 0}`);
+  console.log(`   Centers:       ${centerRegistry?.registry?.length ?? 0}`);
+  console.log(`   Committees:    ${committees?.length ?? 0}`);
+  console.log(
+    `   EC-ECE Matrix: ${eceMatrix ? Object.keys(eceMatrix.matrix).length : 0} ECs`,
+  );
+  console.log(
+    `   EC Details:    ${ecCertifiersAll ? Object.keys(ecCertifiersAll.ec_details).length : 0} ECs`,
+  );
+  console.log("");
 
-  if (ecStandards.length === 0 && certifiers.length === 0 && centers.length === 0) {
-    console.log("⚠️  No data to seed. Run with --fresh to harvest data first.\n");
+  if (!ecStandards || ecStandards.length === 0) {
+    console.log(
+      "⚠️  No EC standards data found. Cannot proceed.\n",
+    );
     process.exit(1);
   }
 
-  // Seed data
-  console.log("💾 Seeding database...\n");
+  const validEcStandards: ExtractedEC[] = ecStandards;
 
-  let totalProcessed = 0;
-
-  if (ecStandards.length > 0) {
-    console.log("   Seeding EC Standards...");
-    const ecCount = await seedECStandards(ecStandards, args.verbose);
-    console.log(`   ✅ Processed ${ecCount} EC Standards\n`);
-    totalProcessed += ecCount;
+  // Build committee lookup (committee ID → committee object)
+  const committeeLookup = new Map<string, ExtractedCommittee>();
+  if (committees) {
+    for (const c of committees) {
+      committeeLookup.set(String(c.id), c);
+    }
   }
 
-  if (certifiers.length > 0) {
-    console.log("   Seeding Certifiers...");
-    const certCount = await seedCertifiers(certifiers, args.verbose);
-    console.log(`   ✅ Processed ${certCount} Certifiers\n`);
-    totalProcessed += certCount;
+  const stats: Record<string, number> = {};
+
+  // ── Step 1: Seed EC Standards ────────────────────────────────────────────
+
+  console.log("💾 Step 1/5: Seeding EC Standards...");
+  const ecResult = await seedECStandards(
+    validEcStandards,
+    committeeLookup,
+    ecCertifiersAll?.ec_details ?? null,
+    args.verbose,
+  );
+  console.log(
+    `   ✅ ${ecResult.created} EC Standards processed\n`,
+  );
+  stats.ecStandards = ecResult.created;
+
+  // ── Step 2: Seed Certifiers ──────────────────────────────────────────────
+
+  if (certifierRegistry?.registry) {
+    console.log("💾 Step 2/5: Seeding Certifiers...");
+    const certCount = await seedCertifiers(
+      certifierRegistry.registry,
+      args.verbose,
+    );
+    console.log(`   ✅ ${certCount} Certifiers processed\n`);
+    stats.certifiers = certCount;
+  } else {
+    console.log("⏭️  Step 2/5: Skipping Certifiers (no data)\n");
   }
 
-  if (centers.length > 0) {
-    console.log("   Seeding Centers...");
-    const centerCount = await seedCenters(centers, args.verbose);
-    console.log(`   ✅ Processed ${centerCount} Centers\n`);
-    totalProcessed += centerCount;
+  // ── Step 3: Seed Centers ─────────────────────────────────────────────────
+
+  if (centerRegistry?.registry) {
+    console.log("💾 Step 3/5: Seeding Centers...");
+    const centerCount = await seedCenters(
+      centerRegistry.registry,
+      args.verbose,
+    );
+    console.log(`   ✅ ${centerCount} Centers processed\n`);
+    stats.centers = centerCount;
+  } else {
+    console.log("⏭️  Step 3/5: Skipping Centers (no data)\n");
   }
 
-  // Create sync job record
-  await createSyncJobRecord(totalProcessed, startTime);
+  // ── Step 4: Seed Accreditations ──────────────────────────────────────────
 
-  // Summary
+  if (eceMatrix?.matrix) {
+    console.log("💾 Step 4/5: Seeding Accreditations (EC→Certifier)...");
+    const accResult = await seedAccreditations(eceMatrix.matrix, args.verbose);
+    console.log(
+      `   ✅ ${accResult.created} Accreditations created (${accResult.skipped} skipped)\n`,
+    );
+    stats.accreditations = accResult.created;
+  } else {
+    console.log("⏭️  Step 4/5: Skipping Accreditations (no data)\n");
+  }
+
+  // ── Step 5: Seed Center Offerings ────────────────────────────────────────
+
+  if (centerRegistry?.registry) {
+    console.log("💾 Step 5/5: Seeding Center Offerings (Center→EC)...");
+    const offerResult = await seedCenterOfferings(
+      centerRegistry.registry,
+      args.verbose,
+    );
+    console.log(
+      `   ✅ ${offerResult.created} Center Offerings created (${offerResult.skipped} skipped)\n`,
+    );
+    stats.centerOfferings = offerResult.created;
+  } else {
+    console.log("⏭️  Step 5/5: Skipping Center Offerings (no data)\n");
+  }
+
+  // ── Record sync job ──────────────────────────────────────────────────────
+
+  await createSyncJobRecord(stats, startTime);
+
+  // ── Summary ──────────────────────────────────────────────────────────────
+
   const duration = ((Date.now() - startTime.getTime()) / 1000).toFixed(2);
+
+  console.log("═══════════════════════════════════════");
   console.log("✅ RENEC seed completed!\n");
-  console.log("📊 Summary:");
-  console.log(`   Total records processed: ${totalProcessed}`);
-  console.log(`   Duration: ${duration}s`);
-  console.log(`   Sync job recorded in database\n`);
+  console.log("📊 Seed Summary:");
+  for (const [key, value] of Object.entries(stats)) {
+    console.log(`   ${key}: ${value}`);
+  }
+  console.log(`   Duration: ${duration}s\n`);
 
   // Get final counts from database
-  const [ecCount, certCount, centerCount] = await Promise.all([
-    prisma.renecEC.count(),
-    prisma.renecCertifier.count(),
-    prisma.renecCenter.count(),
-  ]);
+  const [ecCount, certCount, centerCount, accCount, offeringCount, syncCount] =
+    await Promise.all([
+      prisma.renecEC.count(),
+      prisma.renecCertifier.count(),
+      prisma.renecCenter.count(),
+      prisma.renecAccreditation.count(),
+      prisma.renecCenterOffering.count(),
+      prisma.renecSyncJob.count(),
+    ]);
 
   console.log("📈 Database State:");
-  console.log(`   EC Standards: ${ecCount}`);
-  console.log(`   Certifiers: ${certCount}`);
-  console.log(`   Centers: ${centerCount}\n`);
+  console.log(`   RenecEC:              ${ecCount}`);
+  console.log(`   RenecCertifier:       ${certCount}`);
+  console.log(`   RenecCenter:          ${centerCount}`);
+  console.log(`   RenecAccreditation:   ${accCount}`);
+  console.log(`   RenecCenterOffering:  ${offeringCount}`);
+  console.log(`   RenecSyncJob:         ${syncCount}`);
+  console.log(
+    `   Total:                ${ecCount + certCount + centerCount + accCount + offeringCount + syncCount}`,
+  );
+  console.log("");
 }
 
 main()

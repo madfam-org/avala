@@ -112,9 +112,16 @@ pnpm db:migrate
 
 # Seed the database
 pnpm db:seed
+
+# (Optional) Seed RENEC production data — 1,477 EC standards,
+# 482 certifiers, 340 centers, and all accreditation relationships
+pnpm --filter @avala/db db:seed:renec
+
+# (Optional) Validate RENEC data coverage
+pnpm --filter @avala/db db:seed:validate
 ```
 
-**Seeded Data:**
+**Seeded Data (`db:seed`):**
 - Tenant: `madfam` (Innovaciones MADFAM)
 - Users:
   - `admin@avala.local` / `changeme` (ADMIN)
@@ -122,6 +129,14 @@ pnpm db:seed
   - `assessor@avala.local` (ASSESSOR)
   - `trainee@avala.local` (TRAINEE)
 - Sample EC Standards and Courses
+
+**RENEC Data (`db:seed:renec`):**
+- 1,477 EC competency standards from CONOCER/RENEC API
+- 482 certifying entities (ECE/OC) from RENEC web scraping
+- 340 evaluation centers (CCAP) from RENEC web scraping
+- ~7,573 EC→Certifier accreditation relationships
+- ~680 Center→EC offering relationships
+- Committee enrichment (581 committees with contacts)
 
 ### 5. Run Development Server
 

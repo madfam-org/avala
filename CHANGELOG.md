@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+#### RENEC Production Data Seeding (Phase 1)
+- Rewritten `seed-renec.ts` to load all extracted RENEC data into the database
+  - 1,477 EC standards from `ec_standards_api.json` (RENEC API)
+  - 482 certifying entities from `master_ece_registry.json` (web scraping)
+  - 340 evaluation centers from `master_ccap_registry.json` (web scraping)
+  - ~7,573 EC→Certifier accreditation relationships from `ec_ece_matrix.json`
+  - ~680 Center→EC offering relationships from center registry
+  - Committee enrichment from `committees_complete.json` (581 committees)
+  - Occupation and course data from `ec_certifiers_all.json`
+- Data coverage validation script (`seeds/validate-coverage.ts`)
+  - Record count verification against expected totals
+  - EC code format validation (EC####[.##])
+  - Referential integrity checks for accreditations and offerings
+  - Data source attribution reporting
+- New npm scripts: `db:seed:renec`, `db:seed:validate`
+- Batch transaction processing (100-200 records per batch) for performance
+- Idempotent upserts with `skipDuplicates` for safe re-runs
+- SHA-256 content hashing for future change detection
+
 #### Enclii DevOps Infrastructure
 - Enclii PaaS deployment configuration (`.enclii.yml`)
 - Service specifications for API and Web (`infra/enclii/`)

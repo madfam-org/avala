@@ -46,6 +46,8 @@ pnpm typecheck                # Type check all
 pnpm db:generate              # Generate Prisma client
 pnpm db:migrate               # Apply migrations
 pnpm db:seed                  # Seed data
+pnpm db:seed:renec            # Seed RENEC data (1,477 ECs + certifiers + centers)
+pnpm db:seed:validate         # Validate RENEC data coverage
 pnpm db:studio                # Prisma Studio GUI
 pnpm db:push                  # Push schema (dev only)
 ```
